@@ -20,7 +20,7 @@ from ..client.agent import ChatManager, SessionBusyError
 from ..client.catalog import requires_approval
 from ..client.events import Event
 from ..client.hub import HubError, McpHub
-from ..client.providers import AnthropicProvider, Provider
+from ..client.providers import Provider, create_provider
 from ..config import APPROVAL_POLICIES, Settings
 from ..errors import LocalAsistanError
 from ..logging_setup import get_logger
@@ -78,7 +78,7 @@ def create_app(
             log.error("MCP server could not be started: %s", exc)
         app.state.settings = settings
         app.state.hub = hub
-        app.state.provider = provider or AnthropicProvider(settings)
+        app.state.provider = provider or create_provider(settings)
         app.state.manager = ChatManager(hub, app.state.provider, settings)
         try:
             yield
@@ -115,6 +115,8 @@ def create_app(
                 "llm": {
                     "provider": manager.provider.name,
                     "configured": manager.provider.is_configured,
+                    "missing": getattr(manager.provider, "missing_setting", None)
+                    or (None if manager.provider.is_configured else "ANTHROPIC_API_KEY"),
                     "model": s.model,
                     "effort": s.effort,
                     "thinking": s.thinking,

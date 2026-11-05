@@ -7,17 +7,21 @@ Sunucu alt sürecine yalnızca gereken değerler aktarılır (`Settings.server_e
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .errors import ConfigError
 
 APPROVAL_POLICIES = ("ask_destructive", "ask_writes", "auto")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
+PROVIDERS = ("anthropic", "openai_compat")
 DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MAX_TOKENS = {"anthropic": 64000, "openai_compat": 8192}
 DEFAULT_PORT = 8765
 _TRUE = {"1", "true", "yes", "on", "evet"}
 _FALSE = {"0", "false", "no", "off", "hayir", "hayır", ""}
@@ -139,6 +143,43 @@ def _path(raw: str) -> Path:
     return Path(raw).expanduser()
 
 
+def _is_loopback(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def normalize_base_url(raw: str, *, has_key: bool) -> str:
+    """`LOCALASISTAN_BASE_URL` doğrulaması: http(s), kimlik bilgisi yok, anahtar düz http üzerinden gitmez.
+
+    Yaygın hata: tam uç noktayı (`…/chat/completions`) yapıştırmak — kök adrese indirilir."""
+    url = raw.strip()
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ConfigError(
+            f"LOCALASISTAN_BASE_URL must be an http(s) URL such as https://integrate.api.nvidia.com/v1 (got '{raw}')."
+        )
+    if parts.username or parts.password:
+        raise ConfigError("LOCALASISTAN_BASE_URL must not contain credentials; put the key in LOCALASISTAN_API_KEY.")
+    if parts.query or parts.fragment:
+        raise ConfigError("LOCALASISTAN_BASE_URL must not contain a query string or fragment.")
+    if parts.scheme == "http" and has_key and not _is_loopback(parts.hostname):
+        raise ConfigError(
+            "LOCALASISTAN_BASE_URL uses plain http with an API key set; the key would travel unencrypted. "
+            "Use https (plain http is only allowed for localhost)."
+        )
+    path = parts.path.rstrip("/")
+    for suffix in ("/chat/completions", "/completions"):
+        if path.endswith(suffix):
+            path = path[: -len(suffix)]
+            break
+    netloc = parts.netloc
+    return f"{parts.scheme}://{netloc}{path}"
+
+
 # --------------------------------------------------------------------------- ayarlar
 @dataclass(frozen=True)
 class Settings:
@@ -146,6 +187,8 @@ class Settings:
     workspace: Path
     timezone: str
     # LLM
+    provider: str = "anthropic"
+    base_url: str | None = None
     model: str = DEFAULT_MODEL
     effort: str = "medium"
     thinking: bool = True
@@ -199,6 +242,14 @@ class Settings:
         effort = merged.get("LOCALASISTAN_EFFORT", "medium").strip().lower()
         if effort not in EFFORTS:
             raise ConfigError(f"LOCALASISTAN_EFFORT must be one of {', '.join(EFFORTS)} (got '{effort}').")
+        provider = merged.get("LOCALASISTAN_PROVIDER", "anthropic").strip().lower().replace("-", "_")
+        if provider not in PROVIDERS:
+            raise ConfigError(f"LOCALASISTAN_PROVIDER must be one of {', '.join(PROVIDERS)} (got '{provider}').")
+        compat = provider == "openai_compat"
+        api_key = ((merged.get("LOCALASISTAN_API_KEY") if compat else merged.get("ANTHROPIC_API_KEY")) or "").strip()
+        base_url_raw = merged.get("LOCALASISTAN_BASE_URL", "").strip()
+        base_url = normalize_base_url(base_url_raw, has_key=bool(api_key)) if compat and base_url_raw else None
+        model = merged.get("LOCALASISTAN_MODEL", "").strip() or ("" if compat else DEFAULT_MODEL)
         approval = merged.get("LOCALASISTAN_APPROVAL", "ask_destructive").strip().lower()
         if approval not in APPROVAL_POLICIES:
             raise ConfigError(
@@ -215,14 +266,16 @@ class Settings:
             home=home,
             workspace=workspace,
             timezone=detect_timezone(merged, localtime_path),
-            model=merged.get("LOCALASISTAN_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL,
+            provider=provider,
+            base_url=base_url,
+            model=model,
             effort=effort,
             thinking=thinking_raw == "adaptive",
-            max_tokens=_int(merged, "LOCALASISTAN_MAX_TOKENS", 64000, 256, 128000),
+            max_tokens=_int(merged, "LOCALASISTAN_MAX_TOKENS", DEFAULT_MAX_TOKENS[provider], 256, 128000),
             max_iterations=_int(merged, "LOCALASISTAN_MAX_ITERATIONS", 12, 1, 100),
             refusal_fallback=_bool(merged, "LOCALASISTAN_REFUSAL_FALLBACK", True),
             approval=approval,
-            api_key=(merged.get("ANTHROPIC_API_KEY") or "").strip() or None,
+            api_key=api_key or None,
             host=merged.get("LOCALASISTAN_HOST", "127.0.0.1").strip() or "127.0.0.1",
             port=_int(merged, "LOCALASISTAN_PORT", DEFAULT_PORT, 1, 65535),
             log_level=log_level,
@@ -258,6 +311,8 @@ class Settings:
             "home": str(self.home),
             "workspace": str(self.workspace),
             "timezone": self.timezone,
+            "provider": self.provider,
+            "base_url": self.base_url,
             "model": self.model,
             "effort": self.effort,
             "thinking": "adaptive" if self.thinking else "off",

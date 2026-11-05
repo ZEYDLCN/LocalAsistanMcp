@@ -173,12 +173,14 @@ class ChatSession:
         turn_id = uuid.uuid4().hex[:8]
         yield Event("turn_start", {"turn_id": turn_id})
         if not self.provider.is_configured:
+            missing = getattr(self.provider, "missing_setting", None) or "ANTHROPIC_API_KEY"
+            hint = " Run `localasistan models` to list the valid model ids." if missing == "LOCALASISTAN_MODEL" else ""
             yield Event(
                 "error",
                 {
                     "kind": "no_api_key",
-                    "message": "ANTHROPIC_API_KEY is not set. Add it to your environment or .env file and restart; "
-                    "the Tools tab still works without it.",
+                    "message": f"{missing} is not set. Add it to your environment or .env file and restart; "
+                    f"the Tools tab still works without it.{hint}",
                 },
             )
             yield Event("turn_end", {"stop_reason": "error", "iterations": 0})

@@ -25,7 +25,8 @@ from . import __version__
 from .client.agent import ChatManager, ChatSession
 from .client.events import Event
 from .client.hub import HubError, McpHub
-from .client.providers import AnthropicProvider, Provider
+from .client.openai_compat import list_models
+from .client.providers import Provider, ProviderError, create_provider
 from .config import Settings
 from .errors import ConfigError, LocalAsistanError
 from .logging_setup import configure_logging
@@ -114,10 +115,9 @@ def cmd_ui(args: argparse.Namespace, settings: Settings) -> int:
             threading.Event().wait(0.1)
         if server.started:
             print(f"LocalAsistan hazır → {url}   (durdurmak için Ctrl+C)")
-            if not settings.has_api_key:
-                print(
-                    "Uyarı: ANTHROPIC_API_KEY ayarlı değil — sohbet kapalı, 'Araçlar' sekmesi çalışır.", file=sys.stderr
-                )
+            missing = getattr(create_provider(settings), "missing_setting", None)
+            if missing:
+                print(f"Uyarı: {missing} ayarlı değil — sohbet kapalı, 'Araçlar' sekmesi çalışır.", file=sys.stderr)
             if not args.no_browser:
                 webbrowser.open(url)
 
@@ -275,14 +275,15 @@ async def _render(
 def cmd_chat(args: argparse.Namespace, settings: Settings, provider: Provider | None = None) -> int:
     async def run() -> int:
         hub = McpHub(server_params(settings), tool_timeout=settings.tool_timeout_seconds)
-        manager = ChatManager(hub, provider or AnthropicProvider(settings), settings)
+        manager = ChatManager(hub, provider or create_provider(settings), settings)
         try:
             await hub.start()
         except HubError as exc:
             print(f"Hata: {exc}", file=sys.stderr)
             return 1
         if not manager.provider.is_configured:
-            print("Hata: ANTHROPIC_API_KEY ayarlı değil (.env dosyasına ekleyin).", file=sys.stderr)
+            missing = getattr(manager.provider, "missing_setting", None) or "ANTHROPIC_API_KEY"
+            print(f"Hata: {missing} ayarlı değil (.env dosyasına ekleyin).", file=sys.stderr)
             await hub.stop()
             return 2
 
@@ -351,6 +352,28 @@ def cmd_desktop_config(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------------- models
+def cmd_models(args: argparse.Namespace, settings: Settings, http_client: Any = None) -> int:
+    """`LOCALASISTAN_PROVIDER=openai_compat` için sunucunun model kimliklerini listeler (örn. `--filter glm`)."""
+    if settings.provider != "openai_compat":
+        print(
+            "Hata: bu komut yalnızca LOCALASISTAN_PROVIDER=openai_compat için (.env içine yazın; bkz. README).",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        ids = list_models(settings, http_client)
+    except ProviderError as exc:
+        print(f"Hata: {exc.message}", file=sys.stderr)
+        return 1
+    needle = (args.filter or "").casefold()
+    shown = [m for m in ids if needle in m.casefold()]
+    for model in shown:
+        print(model)
+    print(f"{len(shown)} / {len(ids)} model", file=sys.stderr)
+    return 0 if shown else 1
+
+
 # ---------------------------------------------------------------------------------- main
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -383,6 +406,10 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="kurulum ve ortam denetimi")
     doctor.add_argument("--llm", action="store_true", help="gerçek bir API çağrısı da dene (küçük bir ücret doğurur)")
     doctor.set_defaults(func=cmd_doctor)
+
+    models = sub.add_parser("models", help="openai_compat sunucusundaki model kimliklerini listele")
+    models.add_argument("--filter", help="yalnızca adında bu metin geçenleri göster (örn. glm)")
+    models.set_defaults(func=cmd_models)
 
     sub.add_parser("config", help="geçerli yapılandırmayı göster").set_defaults(func=cmd_config)
     sub.add_parser("desktop-config", help="Claude Desktop için mcpServers JSON'u üret").set_defaults(

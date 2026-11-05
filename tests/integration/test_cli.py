@@ -163,10 +163,26 @@ class TestDoctor:
         from localasistan.client.providers import AnthropicProvider
 
         checks = await run_checks(settings, live_llm=True, provider=AnthropicProvider(settings, client=fake.client()))
-        live = checks[-1]
+        live = next(c for c in checks if c.name.startswith("canlı LLM çağrısı"))
         assert live.status == OK and "model=claude-opus-5-5" in live.detail and "5400 tok" in live.detail
-        body = fake.body()
+        body = fake.body(0)
         assert len(body["tools"]) == 25 and body["thinking"] == {"type": "adaptive"} and body["fallbacks"] == "default"
+        assert all(c.status != FAIL for c in checks)
+        # ikinci istek: araç çağırma denemesi (sahte sunucuda yanıt kalmadığı için "yapılamadı" uyarısı, hata değil)
+        assert checks[-1].name == "araç çağırma denemesi" and checks[-1].status == WARN
+
+    async def test_tool_check_passes_when_the_model_calls_a_real_tool_with_valid_arguments(self, settings):
+        fake = FakeAnthropic(
+            [
+                message_stream([("text", "OK")]),
+                message_stream([("tool_use", "toolu_1", "calendar_now", {})], stop_reason="tool_use"),
+            ]
+        )
+        from localasistan.client.providers import AnthropicProvider
+
+        checks = await run_checks(settings, live_llm=True, provider=AnthropicProvider(settings, client=fake.client()))
+        tool = checks[-1]
+        assert tool.status == OK and "calendar_now" in tool.detail
         assert all(c.status != FAIL for c in checks)
 
     async def test_live_llm_failure_is_reported_not_raised(self, settings):

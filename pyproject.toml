@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
     "mcp>=2.3,<3",
     "anthropic>=2.5,<3",
+    "httpx2>=2.10,<3",
     "starlette",
     "uvicorn",
     "jsonschema>=4",

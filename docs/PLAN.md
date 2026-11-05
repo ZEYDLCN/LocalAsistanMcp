@@ -156,6 +156,7 @@ Her faz: **çıktı → kabul kriteri → ayrı commit.**
 | 6 CLI / Mac / dokümantasyon | ✅ | `localasistan` komutları, `doctor --llm`, kurulum betikleri, README |
 | 7 QA | ✅ | Bkz. [`QA.md`](QA.md): katmanlı testler, özellik-tabanlı testler, mutasyon denetimi, Python 3.11–3.13 |
 | 8 Yayın | ✅ | Commit geçmişi denetimi, feature branch push |
+| 9 Ek LLM sağlayıcısı | ✅ | `LOCALASISTAN_PROVIDER=openai_compat`: NVIDIA (GLM vb.), OpenRouter, Ollama… `localasistan models`, araç çağırma denemesi (`doctor --llm`); sahte sunucuyla doğrulandı, canlı deneme kullanıcıda |
 
 **Planlanan sapmalar (gerekçeli):**
 * Takvim araç sayısı 10 yerine **9** (içe/dışa aktarım ayrı araçlar; “şimdi” ve “serbest zaman” dahil, fazlalık araç eklenmedi).

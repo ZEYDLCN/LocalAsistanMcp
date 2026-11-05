@@ -46,7 +46,7 @@ open ~/.localasistan/workspace     # asistanın dosya alanını Finder'da görü
 
 Dosya alanını Finder'da kolay erişilen bir yere taşımak isterseniz `.env` içine `LOCALASISTAN_WORKSPACE=~/Documents/LocalAsistan` yazın.
 
-Kurulumu doğrulamak için (ikincisi **gerçek bir API çağrısı** yapar, birkaç bin token tutar):
+Kurulumu doğrulamak için (ikincisi **iki gerçek API çağrısı** yapar: bağlantı ve araç çağırma denemesi; birkaç bin token tutar):
 
 ```bash
 .venv/bin/localasistan doctor
@@ -65,8 +65,42 @@ MCP sunucusu bağımsızdır; LLM'i başka bir istemci sağlayabilir. Anahtar ge
 |---|---|---|
 | **Claude Desktop** | Claude hesabınız | [aşağıda](#claude-desktop-ve-diğer-mcp-istemcileri-ile-kullanma) |
 | **Claude Code** | Claude hesabınız | `claude mcp add localasistan -- $(pwd)/.venv/bin/python -m localasistan.server` |
+| **NVIDIA ücretsiz API'si (GLM vb.)** | NVIDIA'nın barındırdığı model | [aşağıda](#nvidia-ücretsiz-apisi-glm-ve-diğer-openai-uyumlu-sağlayıcılar) |
 | **Araçlar sekmesi** (`./scripts/run.sh`) | yok | Her aracı elle çalıştırın; “Çalıştır” düğmesi sizin onayınızdır |
 | **Komut satırı** | yok | `.venv/bin/localasistan tools` · `.venv/bin/localasistan call calendar_now` · `call db_query sql="select * from giderler limit 5"` |
+
+### NVIDIA ücretsiz API'si (GLM) ve diğer OpenAI uyumlu sağlayıcılar
+
+Sohbet arayüzü Claude yerine `POST …/chat/completions` konuşan herhangi bir hizmetle de çalışır: NVIDIA (build.nvidia.com), OpenRouter, Groq,
+yerel Ollama / vLLM / LM Studio. Model adını tahmin etmeyin; sunucudan listeleyin:
+
+1. build.nvidia.com'a giriş yapıp bir model sayfasından API anahtarı oluşturun (`nvapi-…`).
+2. `.env` dosyasına yazın:
+   ```
+   LOCALASISTAN_PROVIDER=openai_compat
+   LOCALASISTAN_BASE_URL=https://integrate.api.nvidia.com/v1
+   LOCALASISTAN_API_KEY=nvapi-...
+   ```
+3. Kendi bilgisayarınızdan model kimliklerini listeleyin ve çıkan adı `.env`'e `LOCALASISTAN_MODEL=` olarak yazın:
+   ```bash
+   .venv/bin/localasistan models --filter glm
+   ```
+4. Bağlantıyı **ve modelin araç çağırabildiğini** denetleyin (iki küçük istek yapar):
+   ```bash
+   .venv/bin/localasistan doctor --llm
+   ```
+   “araç çağırma denemesi” satırı ✓ ise model gerçek araç şemalarımızla geçerli bir çağrı üretti; ⚠ ise başka bir model deneyin.
+5. `./scripts/run.sh` — üstteki çipte model adı görünür.
+
+Yerel Ollama için: `LOCALASISTAN_BASE_URL=http://localhost:11434/v1`, anahtar gerekmez (düz `http` yalnızca `localhost` için kabul edilir; anahtar
+varken uzak bir `http` adresi reddedilir).
+
+**Bilmeniz gerekenler:**
+- Ücretsiz katmanlar dakika başına istek sınırlıdır; sınıra takılınca uygulama kısa süre bekleyip en fazla iki kez yeniden dener ve bunu sohbette gösterir.
+- Araç çağırma kalitesi modele göre değişir; onay mekanizması aynı çalışır ama zayıf bir model yanlış araç ya da argüman seçebilir (`doctor --llm` bunu ölçer).
+- **Gizlilik:** araçların döndürdüğü her şey (dosya içeriği, takvim, veritabanı satırı) seçtiğiniz sağlayıcıya gider. Hizmetin veri kullanım koşullarını okuyun.
+- Düşünme çabası ve sunucu tarafı yedek model yalnızca Claude içindir; bu sağlayıcıda geçerli değildir. Çıktı üst sınırı varsayılan 8192 token'dır (`LOCALASISTAN_MAX_TOKENS`).
+- Doğrulama durumu: istek/yanıt biçimi, akış, araç çağırma, hata ve yeniden deneme sahte bir sunucuyla test edildi; gerçek NVIDIA uç noktasıyla ilk deneme sizde olacak.
 
 ### Örnek istekler
 
@@ -101,6 +135,7 @@ src/localasistan/
   server/    files.py database.py calendar.py ics.py   servisler (MCP'den bağımsız)
              app.py                                      MCP araçları/kaynakları/promptları
   client/    hub.py catalog.py agent.py providers.py     MCP istemcisi + ajan döngüsü + Claude
+             openai_compat.py                            OpenAI uyumlu sağlayıcı (NVIDIA, OpenRouter, Ollama…)
   web/       app.py security.py sse.py static/           arayüz
   cli.py seed.py doctor.py
 ```
@@ -149,7 +184,9 @@ Ortam değişkenleri ya da `.env` (gerçek ortam değişkeni önceliklidir). Tam
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Sohbet için gerekli (Araçlar sekmesi anahtarsız çalışır) |
-| `LOCALASISTAN_MODEL` | `claude-opus-5-5` | Kullanılacak model |
+| `LOCALASISTAN_PROVIDER` | `anthropic` | `anthropic` ya da `openai_compat` (NVIDIA, OpenRouter, Ollama…) |
+| `LOCALASISTAN_BASE_URL` / `LOCALASISTAN_API_KEY` | — | `openai_compat` için kök adres (`…/v1`) ve anahtar; Ollama gibi yerel sunucular anahtar istemez |
+| `LOCALASISTAN_MODEL` | `claude-opus-5-5` | Kullanılacak model (`openai_compat`'te zorunlu; adı `localasistan models` ile bulun) |
 | `LOCALASISTAN_EFFORT` | `medium` | `low` · `medium` · `high` · `xhigh` · `max` |
 | `LOCALASISTAN_REFUSAL_FALLBACK` | `1` | Güvenlik reddinde sunucu tarafı yedek model |
 | `LOCALASISTAN_APPROVAL` | `ask_destructive` | Onay politikası |
@@ -166,7 +203,8 @@ localasistan chat                           terminalde sohbet (/yeni, /araclar, 
 localasistan tools                          araç listesi
 localasistan call fs_read path=notlar/x.md  LLM'siz araç çağrısı  (ya da --json '{"path": "..."}')
 localasistan seed [--force]                 örnek veri
-localasistan doctor [--llm]                 kurulum denetimi (+ gerçek API denemesi)
+localasistan doctor [--llm]                 kurulum denetimi (+ gerçek API ve araç çağırma denemesi)
+localasistan models [--filter glm]          openai_compat sunucusundaki model kimliklerini listele
 localasistan config | desktop-config | server
 ```
 

@@ -59,6 +59,9 @@ class Provider(Protocol):
     @property
     def is_configured(self) -> bool: ...
 
+    # `is_configured` False iken kullanıcıya söylenecek eksik ayarın adı (isteğe bağlı: yoksa ANTHROPIC_API_KEY)
+    # missing_setting: str | None
+
     def stream_turn(
         self, *, system: str, tools: list[dict[str, Any]], messages: list[dict[str, Any]]
     ) -> AsyncIterator[Event | AssistantTurn]: ...
@@ -106,6 +109,10 @@ class AnthropicProvider:
     @property
     def is_configured(self) -> bool:
         return self._client is not None or bool(self.settings.api_key) or bool(os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+
+    @property
+    def missing_setting(self) -> str | None:
+        return None if self.is_configured else "ANTHROPIC_API_KEY"
 
     def _get_client(self) -> anthropic.AsyncAnthropic:
         if self._client is None:
@@ -212,3 +219,12 @@ def _message(exc: anthropic.APIError) -> str:
         if isinstance(error, dict) and error.get("message"):
             return str(error["message"])[:400]
     return str(exc)[:400]
+
+
+def create_provider(settings: Settings) -> Provider:
+    """`LOCALASISTAN_PROVIDER` değerine göre sağlayıcıyı kurar (anthropic | openai_compat)."""
+    if settings.provider == "openai_compat":
+        from .openai_compat import OpenAICompatProvider  # döngüsel içe aktarmayı önler
+
+        return OpenAICompatProvider(settings)
+    return AnthropicProvider(settings)

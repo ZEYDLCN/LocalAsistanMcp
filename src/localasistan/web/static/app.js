@@ -159,12 +159,14 @@ async function refreshStatus() {
   const s = state.status;
   $("#version").textContent = `v${s.version}`;
   $("#model-chip").textContent = s.llm.model;
-  $("#effort-chip").textContent = s.llm.thinking ? `düşünme: ${s.llm.effort}` : "düşünme kapalı";
+  const effortChip = $("#effort-chip");
+  effortChip.textContent = s.llm.thinking ? `düşünme: ${s.llm.effort}` : "düşünme kapalı";
+  effortChip.classList.toggle("hidden", s.llm.provider === "openai_compat"); /* düşünme çabası OpenAI uyumlu sunucularda yok */
   $("#policy-select").value = s.approval.policy;
   setMcpIndicator(s.mcp.connected ? "on" : "off", s.mcp.connected ? `Bağlı · ${s.mcp.tool_count ?? "?"} araç` : (s.mcp.last_error || "MCP sunucusu bağlı değil"));
   const banner = $("#banner");
   if (!s.llm.configured) {
-    banner.textContent = "ANTHROPIC_API_KEY ayarlı değil: sohbet kapalı. Anahtarı .env dosyasına ekleyip yeniden başlatın. “Araçlar” sekmesi anahtarsız çalışır.";
+    banner.textContent = `${s.llm.missing || "ANTHROPIC_API_KEY"} ayarlı değil: sohbet kapalı. Değeri .env dosyasına ekleyip yeniden başlatın. “Araçlar” sekmesi anahtarsız çalışır.`;
     banner.classList.remove("hidden");
   } else {
     banner.classList.add("hidden");
@@ -186,7 +188,7 @@ function renderTicker() {
     return;
   }
   if (s.approval.policy === "auto") { bar.classList.add("warn"); text.textContent = "Dikkat: onay kapalı. Yıkıcı araçlar sormadan çalışır."; return; }
-  if (!s.llm.configured) { bar.classList.add("warn"); text.textContent = "Sohbet kapalı: ANTHROPIC_API_KEY eksik. Araçlar sekmesi çalışır."; return; }
+  if (!s.llm.configured) { bar.classList.add("warn"); text.textContent = `Sohbet kapalı: ${s.llm.missing || "ANTHROPIC_API_KEY"} eksik. Araçlar sekmesi çalışır.`; return; }
   const policy = { ask_destructive: "yıkıcı işlemlerde onay", ask_writes: "her yazmada onay" }[s.approval.policy];
   text.textContent = `Hazır · ${s.mcp.tool_count ?? "?"} araç · ${s.environment.timezone} · ${policy}`;
 }
@@ -219,10 +221,12 @@ function renderStatusTab(errorText) {
     el("div", { class: "status-card" }, el("h3", { text: "LLM" }), kv([
       ["Sağlayıcı", s.llm.provider],
       ["Model", s.llm.model],
-      ["API anahtarı", s.llm.configured ? "ayarlı" : "EKSİK"],
-      ["Düşünme çabası (effort)", s.llm.effort],
-      ["Uyarlanabilir düşünme", s.llm.thinking ? "açık" : "kapalı"],
-      ["Ret durumunda yedek model", s.llm.refusal_fallback ? "açık" : "kapalı"],
+      ["Yapılandırma", s.llm.configured ? "tamam" : `EKSİK: ${s.llm.missing || "ANTHROPIC_API_KEY"}`],
+      ...(s.llm.provider !== "openai_compat" ? [
+        ["Düşünme çabası (effort)", s.llm.effort],
+        ["Uyarlanabilir düşünme", s.llm.thinking ? "açık" : "kapalı"],
+        ["Ret durumunda yedek model", s.llm.refusal_fallback ? "açık" : "kapalı"],
+      ] : []),
       ["Tur başına en fazla araç turu", s.llm.max_iterations],
     ])),
     el("div", { class: "status-card" }, el("h3", { text: "Ortam" }), kv([
