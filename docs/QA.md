@@ -10,7 +10,7 @@ ve **bu ortamda doğrulanamayan** (Mac'te sizin yapmanız gereken) maddeleri iç
 |---|---|
 | Otomatik test sayısı | **933 geçti**, 1 atlandı (root kullanıcısında anlamsız olan dosya-izni testi) — tarayıcı E2E dahil tam paket |
 | Satır+dal kapsaması (alt süreçler dahil) | **%97** (3 474 satır / 1 092 dal; OpenAI uyumlu sağlayıcı %95, takvim %99, sunucu `app.py` %100, web `security.py` %100) |
-| Mutasyon denetimi (kritik korumalara kasıtlı hata) | **28/28 yakalandı** |
+| Mutasyon denetimi (kritik korumalara kasıtlı hata) | **36/36 yakalandı** |
 | Desteklenen Python | **3.13 · 3.12 · 3.11: üçünde de aynı tam paket** (her birinde 933 geçti, 1 atlandı) |
 | Tarayıcı | Chromium (Playwright), **43 senaryo** (27 işlevsel + 13 tasarım/menü/erişilebilirlik + 3 diğer sağlayıcılar) |
 | MCP uyumluluğu | mcp 2.x istemcisi (yeni + eski el sıkışma) ve **mcp 1.30** istemcisi ile doğrulandı |
