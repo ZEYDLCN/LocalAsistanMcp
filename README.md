@@ -29,7 +29,7 @@ Gereksinim: **Python 3.11+** (yoksa: `brew install python@3.12` ya da `brew inst
 bir [Anthropic API anahtarı](https://console.anthropic.com). Anahtarınız yoksa bkz. [API anahtarı olmadan kullanım](#api-anahtarı-olmadan-kullanım).
 
 ```bash
-git clone -b feature/mcp-server-client https://github.com/ZEYDLCN/LocalAsistanMcp.git && cd LocalAsistanMcp
+git clone https://github.com/ZEYDLCN/LocalAsistanMcp.git && cd LocalAsistanMcp
 ./scripts/setup.sh            # sanal ortam + bağımlılıklar + .env + kurulum denetimi
 open -e .env                  # ANTHROPIC_API_KEY=sk-ant-... satırını doldurun
 ./scripts/run.sh              # arayüz açılır: http://127.0.0.1:8765
