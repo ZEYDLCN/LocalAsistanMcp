@@ -15,7 +15,7 @@ from typing import Any
 from .client.catalog import anthropic_tools
 from .client.events import Event
 from .client.hub import McpHub
-from .client.providers import AnthropicProvider, AssistantTurn, Provider, ProviderError
+from .client.providers import AssistantTurn, Provider, ProviderError, create_provider
 from .config import Settings
 from .errors import LocalAsistanError
 
@@ -49,7 +49,7 @@ async def run_checks(settings: Settings, *, live_llm: bool = False, provider: Pr
 
     py = sys.version_info
     add(Check(OK if py >= (3, 11) else FAIL, "Python", f"{py.major}.{py.minor}.{py.micro} (gerekli: 3.11+)"))
-    for package in ("mcp", "anthropic", "starlette", "uvicorn", "jsonschema"):
+    for package in ("mcp", "anthropic", "httpx2", "starlette", "uvicorn", "jsonschema"):
         version = _version(package)
         add(Check(OK if version else FAIL, f"paket: {package}", version or "kurulu değil"))
 
@@ -65,13 +65,33 @@ async def run_checks(settings: Settings, *, live_llm: bool = False, provider: Pr
 
     add(Check(OK, "saat dilimi", settings.timezone))
     add(Check(OK, "onay politikası", settings.approval))
-    add(
-        Check(
-            OK if settings.has_api_key else WARN,
-            "ANTHROPIC_API_KEY",
-            "ayarlı" if settings.has_api_key else "yok — sohbet çalışmaz; Araçlar sekmesi çalışır",
+    if settings.provider == "openai_compat":
+        ready = bool(settings.base_url and settings.model)
+        add(
+            Check(
+                OK if ready else WARN,
+                "LLM sağlayıcısı (openai_compat)",
+                f"{settings.base_url or 'LOCALASISTAN_BASE_URL yok'}, "
+                f"model={settings.model or 'LOCALASISTAN_MODEL yok'}",
+            )
         )
-    )
+        add(
+            Check(
+                OK if settings.has_api_key else WARN,
+                "LOCALASISTAN_API_KEY",
+                "ayarlı"
+                if settings.has_api_key
+                else "yok — Ollama gibi yerel sunucular anahtar istemez; diğerleri ister",
+            )
+        )
+    else:
+        add(
+            Check(
+                OK if settings.has_api_key else WARN,
+                "ANTHROPIC_API_KEY",
+                "ayarlı" if settings.has_api_key else "yok — sohbet çalışmaz; Araçlar sekmesi çalışır",
+            )
+        )
 
     # MCP sunucusunu gerçekten başlat
     from mcp import StdioServerParameters
@@ -101,17 +121,22 @@ async def run_checks(settings: Settings, *, live_llm: bool = False, provider: Pr
         await hub.stop()
 
     if live_llm:
-        checks.append(await _live_llm_check(settings, specs, provider))
+        provider = provider or create_provider(settings)
+        live = await _live_llm_check(settings, specs, provider)
+        checks.append(live)
+        if live.status == OK and specs:
+            checks.append(await _tool_call_check(settings, specs, provider))
     return checks
 
 
 async def _live_llm_check(settings: Settings, specs: list[Any], provider: Provider | None = None) -> Check:
-    if provider is None and not settings.has_api_key:
-        return Check(FAIL, "canlı LLM çağrısı", "ANTHROPIC_API_KEY ayarlı değil")
+    provider = provider or create_provider(settings)
+    if not provider.is_configured:
+        missing = getattr(provider, "missing_setting", None) or "ANTHROPIC_API_KEY"
+        return Check(FAIL, "canlı LLM çağrısı", f"{missing} ayarlı değil")
     if not specs:
         return Check(FAIL, "canlı LLM çağrısı", "araç listesi alınamadı (MCP sunucusu başlamadı)")
     tools, _ = anthropic_tools(specs)
-    provider = provider or AnthropicProvider(settings)
     try:
         turn: AssistantTurn | None = None
         async for item in provider.stream_turn(
@@ -135,6 +160,42 @@ async def _live_llm_check(settings: Settings, specs: list[Any], provider: Provid
     )
     status = OK if turn.stop_reason in ("end_turn", "tool_use") else WARN
     return Check(status, f"canlı LLM çağrısı ({settings.model})", detail)
+
+
+async def _tool_call_check(settings: Settings, specs: list[Any], provider: Provider) -> Check:
+    """Modelin GERÇEK araç şemalarımızla geçerli bir araç çağrısı üretip üretmediğini dener (model seçmeye yarar)."""
+    from jsonschema import Draft202012Validator
+
+    tools, _ = anthropic_tools(specs)
+    by_name = {t["name"]: t for t in tools}
+    try:
+        turn: AssistantTurn | None = None
+        async for item in provider.stream_turn(
+            system="You are a tool-use check. Use the provided tools; never answer from memory.",
+            tools=tools,
+            messages=[{"role": "user", "content": "What is the current date and time? Use a tool to find out."}],
+        ):
+            if isinstance(item, AssistantTurn):
+                turn = item
+    except ProviderError as exc:
+        return Check(WARN, "araç çağırma denemesi", f"yapılamadı: [{exc.kind}] {exc.message}")
+    except Exception as exc:
+        return Check(WARN, "araç çağırma denemesi", f"yapılamadı: {type(exc).__name__}: {exc}")
+    label = f"araç çağırma denemesi ({settings.model})"
+    if turn is None or not turn.tool_uses:
+        said = (turn.text.strip()[:60] if turn else "") or "yanıt yok"
+        return Check(
+            WARN,
+            label,
+            f"model araç çağırmadı (yanıt: {said!r}); araç kullanımında zayıf olabilir, başka bir model deneyin",
+        )
+    use = turn.tool_uses[0]
+    spec = by_name.get(use.name)
+    if spec is None:
+        return Check(WARN, label, f"model tanımsız bir araç çağırdı: {use.name!r}")
+    if not Draft202012Validator(spec["input_schema"]).is_valid(use.input):
+        return Check(WARN, label, f"{use.name} için geçersiz argüman üretti: {str(use.input)[:80]}")
+    return Check(OK, label, f"{use.name}({str(use.input)[:60]}) — geçerli çağrı")
 
 
 def print_report(checks: list[Check], *, color: bool) -> int:
