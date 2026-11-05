@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localasistan"
+version = "0.1.0"
+description = "Yerel dosya, takvim ve veritabanı araçlarını LLM'e açan kendi MCP sunucusu ve istemcisi (basit web arayüzüyle)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "mcp>=2.3,<3",
+    "anthropic>=2.5,<3",
+    "starlette",
+    "uvicorn",
+    "jsonschema>=4",
+    "tzdata",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=1.0",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+    "playwright>=1.45",
+    "hypothesis>=6.100",
+]
+
+[project.scripts]
+localasistan = "localasistan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+localasistan = ["web/static/*", "web/static/fonts/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "e2e: gerçek tarayıcı (Playwright) ile uçtan uca arayüz testleri",
+    "stdio: gerçek bir MCP sunucu alt süreci başlatan testler",
+]
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
+
+[tool.coverage.run]
+source = ["localasistan"]
+branch = true
+parallel = true
+sigterm = true
+patch = ["subprocess"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = ["if __name__ == .__main__.:", "raise NotImplementedError", "\\.\\.\\."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011", "SIM117"]
+"scripts/qa_mutations.py" = ["E501"]
