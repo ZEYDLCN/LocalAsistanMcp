@@ -8,17 +8,19 @@ ve **bu ortamda doğrulanamayan** (Mac'te sizin yapmanız gereken) maddeleri iç
 
 | Ölçüt | Sonuç |
 |---|---|
-| Otomatik test sayısı | **827 geçti**, 1 atlandı (root kullanıcısında anlamsız olan dosya-izni testi) — tarayıcı E2E dahil tam paket |
-| Satır+dal kapsaması (alt süreçler dahil) | **%97** (3 051 satır / 900 dal; takvim %99, sunucu `app.py` %100, web `security.py` %100) |
+| Otomatik test sayısı | **933 geçti**, 1 atlandı (root kullanıcısında anlamsız olan dosya-izni testi) — tarayıcı E2E dahil tam paket |
+| Satır+dal kapsaması (alt süreçler dahil) | **%97** (3 474 satır / 1 092 dal; OpenAI uyumlu sağlayıcı %95, takvim %99, sunucu `app.py` %100, web `security.py` %100) |
 | Mutasyon denetimi (kritik korumalara kasıtlı hata) | **28/28 yakalandı** |
-| Desteklenen Python | **3.13 · 3.12 · 3.11: üçünde de aynı tam paket** (her birinde 827 geçti, 1 atlandı) |
-| Tarayıcı | Chromium (Playwright), **40 senaryo** (27 işlevsel + 13 tasarım/menü/erişilebilirlik) |
+| Desteklenen Python | **3.13 · 3.12 · 3.11: üçünde de aynı tam paket** (her birinde 933 geçti, 1 atlandı) |
+| Tarayıcı | Chromium (Playwright), **43 senaryo** (27 işlevsel + 13 tasarım/menü/erişilebilirlik + 3 diğer sağlayıcılar) |
 | MCP uyumluluğu | mcp 2.x istemcisi (yeni + eski el sıkışma) ve **mcp 1.30** istemcisi ile doğrulandı |
 | Lint | `ruff check` + `ruff format --check` temiz |
 
-> **Dürüst sınır:** Geliştirme ortamında gerçek bir Anthropic API anahtarı ve macOS yoktu. LLM katmanı, gerçek SDK + sahte HTTP ile
-> (istek gövdesi, başlıklar, SSE ayrıştırma, düşünme bloklarının geri yansıtılması) doğrulandı; ilk **canlı** doğrulama için
-> `localasistan doctor --llm` komutu hazırdır. macOS'a özgü davranışlar için §6'daki liste kullanılmalıdır.
+> **Dürüst sınır:** Geliştirme ortamında gerçek bir Anthropic API anahtarı, gerçek bir NVIDIA (OpenAI uyumlu) uç noktası ve macOS yoktu.
+> Anthropic katmanı gerçek SDK + sahte HTTP ile (istek gövdesi, başlıklar, SSE ayrıştırma, düşünme bloklarının geri yansıtılması),
+> OpenAI uyumlu sağlayıcı ise tamamen sahte bir sunucuyla (`tests/openai_fake.py`) doğrulandı; gerçek bir hizmetin akış/araç çağırma
+> ayrıntıları farklı olabilir. İlk **canlı** doğrulama için `localasistan models` ve `localasistan doctor --llm` (bağlantı + araç çağırma
+> denemesi) hazırdır. macOS'a özgü davranışlar için §6'daki liste kullanılmalıdır.
 
 ## 2. Test katmanları
 
@@ -35,6 +37,7 @@ ve **bu ortamda doğrulanamayan** (Mac'te sizin yapmanız gereken) maddeleri iç
 | Senaryolar | `test_scenarios.py` | Toplantı planlama (boş zaman → rezervasyon → çakışma → alternatif), gider analizi, dosya düzenleme, ICS yedekle-sil-geri yükle, **prompt-injection**, yarış |
 | CLI / süreç | `test_cli.py` | Tüm komutlar, gerçek `ui` süreci, SIGINT/SIGTERM ile temiz kapanış, yetim süreç yok |
 | Tarayıcı E2E | `tests/e2e/test_ui.py` | Sohbet akışı, markdown, onay kartları, durdurma, yeniden yükleme, araç formları, kaynaklar, durum, **XSS yükleri**, mobil taşma. Tasarım: durum şeridi durumları, yerel yazı tipinin yüklenmesi ve Türkçe harfleri kapsaması, karşılama ekranının 1280×860'a **kaydırmasız** sığması, `+` ve `@` menüleri, `@dosya` anmasının modele aynen ulaşması, ipucu kartının kalıcı kapatılması, mesaj kutusu otomatik boyutu, onay başlığı büyük/küçük harf, `prefers-reduced-motion` |
+| OpenAI uyumlu sağlayıcı | `test_openai_compat_provider.py`, `test_openai_compat_flow.py`, `tests/unit/test_config.py` | **Sahte sunucu** (`tests/openai_fake.py`): istek biçimi ve başlıklar, parçalı akışın birleştirilmesi (bölünmüş argümanlar, paralel araç çağrıları, tekrarlanan ad, eksik/yinelenen kimlik), kesilmiş ve bozuk araç JSON'u, `content_filter`→ret, `reasoning_content` geri yazılmaz, bitiş işareti olmayan akış hata sayılır, HTTP hata eşleme (anahtar sızmaz), 429/5xx yeniden deneme + `Retry-After` üst sınırı, `stream_options` geri çekilmesi, geçmiş/araç çevirisi, şema sadeleştirme (25 gerçek araç), `models`, **gerçek MCP aracıyla ajan döngüsü + onay**, `doctor` araç çağırma denemesi, web durumu, URL doğrulama (düz http + anahtar reddi), anahtarın alt sürece/çıktılara geçmemesi |
 | Performans | `test_performance.py` | 3 000 dosya, 1 500 olay, 1 000 satır, 200 hub çağrısı için bütçeler |
 | Doküman tutarlılığı | `tests/unit/test_docs.py` | README sayıları/bağlantıları/araç tablosu koddan sapmasın |
 
@@ -82,6 +85,14 @@ make cov         # kapsama (alt süreçler dahil)
 | M26 | SSE: kopmada üreteç kapatılmıyor | ✅ yakalandı |
 | M27 | ICS: metin kaçışı yapılmıyor | ✅ yakalandı |
 | M28 | Takvim: boş zaman geçmiş saatleri de döndürüyor | ✅ yakalandı |
+| M29 | OpenAI uyumlu: araç sonuçları `tool` yerine `user` mesajı olarak gidiyor | ✅ yakalandı |
+| M30 | OpenAI uyumlu: bitiş işareti olmayan (kopmuş) akış sessizce kabul ediliyor | ✅ yakalandı |
+| M31 | OpenAI uyumlu: kesilmiş (length) araç çağrısı JSON hatası sayılıyor | ✅ yakalandı |
+| M32 | OpenAI uyumlu: 4xx istemci hataları da yeniden deneniyor | ✅ yakalandı |
+| M33 | OpenAI uyumlu: Retry-After üst sınırı yok (saatlerce beklenebilir) | ✅ yakalandı |
+| M34 | Config: düz http ile uzak sunucuya API anahtarı gidebiliyor | ✅ yakalandı |
+| M35 | Config: openai_compat anahtarı MCP alt sürecine aktarılıyor | ✅ yakalandı |
+| M36 | OpenAI uyumlu: 401 hata mesajına API anahtarı sızıyor | ✅ yakalandı |
 
 İlk koşuda iki mutasyon testleri aşmıştı: **M05** gerçek bir boşluktu (authorizer katmanının tek başına testi yoktu → `TestDefenseLayers` eklendi); **M10** *eşdeğer mutant*tı (kaldırılan satır zaten gereksizdi → kod sadeleştirildi, mutasyon anlamlı olanla değiştirildi). M25'in hedef metni geçersizdi, düzeltildi.
 
@@ -108,6 +119,7 @@ Aşağıdakilerin hepsi düzeltildi ve her biri için kalıcı bir test var.
 | 15 | Tasarımda CSS `uppercase` + `lang="tr"`, İngilizce araç başlıklarını Türkçe kurallarla büyütüyordu (“FİLE”, “TİME”) | Ekran görüntüsü + `test_approval_card_keeps_the_english_tool_title_unshouted` / `test_tool_titles_in_the_tools_tab_use_english_casing_rules` | İngilizce başlıklara `lang="en"` |
 | 16 | İki arayüzü aynı testte ayağa kaldırmak sabit bağlantı noktasında çakışıyordu | Yeni E2E testleri | Her arayüz için `free_port()` |
 | 17 | Karşılama ekranı 1280×860'ta taşıyor, mesaj kutusu iki satıra kırılıyor, MCP dairesi kartı kesiyordu | Ekran görüntüleri + `test_hero_and_composer_fit_a_laptop_screen_without_scrolling` | Kolaj/başlık/çipler yeniden ölçeklendi; kolaj `em` birimli |
+| 18 | Düşünme çabası çipini “Anthropic değilse gizle” kuralıyla gizlemek fazla genişti (varsayılan test sağlayıcısı da gizleniyordu) | Yeni tarayıcı testi (`test_other_providers_keep_the_effort_chip`) | Kural “yalnızca `openai_compat` ise gizle” oldu |
 
 ## 5. Güvenlik doğrulama özeti
 
@@ -130,6 +142,7 @@ Aşağıdakilerin hepsi düzeltildi ve her biri için kalıcı bir test var.
 6. İsteğe bağlı: Takvim.app'ten `.ics` dışa aktarıp `calendar_import_ics` ile içe aktarma.
 7. İsteğe bağlı: Claude Desktop ile `localasistan desktop-config` çıktısı (API anahtarı gerektirmez; adımlar README'de). Bu ortamda Claude Desktop çalıştırılamadı; sunucu protokol düzeyinde mcp 1.30 ve 2.x istemcileriyle stdio üzerinden doğrulandı.
 8. Yeni arayüzün Safari'de görünümü (`backdrop`/`:focus-within`/`clamp()` kullanılır; testler Chromium'da). Anton başlık yazı tipi uygulamayla birlikte gelir, internet gerekmez.
+9. OpenAI uyumlu sağlayıcı (NVIDIA/GLM) ilk canlı deneme: `localasistan models --filter glm` → `.env`'e model adı → `localasistan doctor --llm` (“araç çağırma denemesi” ✓ olmalı) → arayüzde gerçek bir görev. Sahte sunucuda görünmeyen sağlayıcıya özgü farklar (ör. araç çağrısını metin içinde döndüren modeller, `stream_options` desteği, kota davranışı) burada ortaya çıkar.
 
 ## 7. Bilinen sınırlar (bilinçli)
 
