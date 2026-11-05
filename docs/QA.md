@@ -8,11 +8,11 @@ ve **bu ortamda doğrulanamayan** (Mac'te sizin yapmanız gereken) maddeleri iç
 
 | Ölçüt | Sonuç |
 |---|---|
-| Otomatik test sayısı | **812 geçti**, 1 atlandı (root kullanıcısında anlamsız olan dosya-izni testi) |
-| Satır+dal kapsaması (alt süreçler dahil) | **≥ %94** (alt süreçler dahil; ölçüm sırasında bir dosyayı düzenlediğim için takvim satırı eksik görünüyor, gerçek değer daha yüksek) |
+| Otomatik test sayısı | **827 geçti**, 1 atlandı (root kullanıcısında anlamsız olan dosya-izni testi) — tarayıcı E2E dahil tam paket |
+| Satır+dal kapsaması (alt süreçler dahil) | **%97** (3 051 satır / 900 dal; takvim %99, sunucu `app.py` %100, web `security.py` %100) |
 | Mutasyon denetimi (kritik korumalara kasıtlı hata) | **28/28 yakalandı** |
-| Desteklenen Python | 3.13 ✅ tam paket · 3.12 / 3.11: doğrulama çalışıyor (sonuç bu satıra işlenecek) |
-| Tarayıcı | Chromium (Playwright), 27 senaryo |
+| Desteklenen Python | **3.13 · 3.12 · 3.11: üçünde de aynı tam paket** (her birinde 827 geçti, 1 atlandı) |
+| Tarayıcı | Chromium (Playwright), **40 senaryo** (27 işlevsel + 13 tasarım/menü/erişilebilirlik) |
 | MCP uyumluluğu | mcp 2.x istemcisi (yeni + eski el sıkışma) ve **mcp 1.30** istemcisi ile doğrulandı |
 | Lint | `ruff check` + `ruff format --check` temiz |
 
@@ -34,7 +34,7 @@ ve **bu ortamda doğrulanamayan** (Mac'te sizin yapmanız gereken) maddeleri iç
 | Gerçek HTTP akışı | `test_web_stream.py` | Gerçek uvicorn: SSE, onay uçları, **bağlantı kopması temizliği**, eşzamanlı oturumlar, sunucu kapanışı |
 | Senaryolar | `test_scenarios.py` | Toplantı planlama (boş zaman → rezervasyon → çakışma → alternatif), gider analizi, dosya düzenleme, ICS yedekle-sil-geri yükle, **prompt-injection**, yarış |
 | CLI / süreç | `test_cli.py` | Tüm komutlar, gerçek `ui` süreci, SIGINT/SIGTERM ile temiz kapanış, yetim süreç yok |
-| Tarayıcı E2E | `tests/e2e/test_ui.py` | Sohbet akışı, markdown, onay kartları, durdurma, yeniden yükleme, araç formları, kaynaklar, durum, **XSS yükleri**, mobil taşma |
+| Tarayıcı E2E | `tests/e2e/test_ui.py` | Sohbet akışı, markdown, onay kartları, durdurma, yeniden yükleme, araç formları, kaynaklar, durum, **XSS yükleri**, mobil taşma. Tasarım: durum şeridi durumları, yerel yazı tipinin yüklenmesi ve Türkçe harfleri kapsaması, karşılama ekranının 1280×860'a **kaydırmasız** sığması, `+` ve `@` menüleri, `@dosya` anmasının modele aynen ulaşması, ipucu kartının kalıcı kapatılması, mesaj kutusu otomatik boyutu, onay başlığı büyük/küçük harf, `prefers-reduced-motion` |
 | Performans | `test_performance.py` | 3 000 dosya, 1 500 olay, 1 000 satır, 200 hub çağrısı için bütçeler |
 | Doküman tutarlılığı | `tests/unit/test_docs.py` | README sayıları/bağlantıları/araç tablosu koddan sapmasın |
 
@@ -104,6 +104,10 @@ Aşağıdakilerin hepsi düzeltildi ve her biri için kalıcı bir test var.
 | 11 | Okuma-authorizer'ı tamamen açılsa **hiçbir test başarısız olmuyordu** (diğer katmanlar yazmayı zaten engelliyor) | Mutasyon M05 | Her savunma katmanı tek başına test edildi (`TestDefenseLayers`) |
 | 12 | Gerçek SDK davranışı varsayımlarımı düzeltti: SDK 2.x kimlik doğrulamayı `Authorization: Bearer` ile yapar; beta uç noktası aynı yolu kullanır; kesik tool-JSON istisna fırlatmaz, **eksik girdi** üretir | Sağlayıcı testleri | `max_tokens`/`refusal` turlarında araç asla çalıştırılmaz (ajan testleri) |
 | 13 | Sohbet listesi, ayrıntı açılınca/yanıt bitince **kırpık kalıyordu**; markdown başlık seviyeleri; mobilde sekme çubuğu dikey yığılıyordu | Ekran görüntüleri + E2E | Akıllı otomatik kaydırma, `#`→`h2`, mobil CSS |
+| 14 | Dosya sandbox'ı özellik testi **tüm örneklerde ortak tek bir jail** kullanıyordu: bir örnek `link_out` bağını silip aynı adla klasör açınca temizlik bunu onarmıyor, sonraki her örnek (boş dizi dahil) kırılıyordu. Sandbox'ta hata yoktu — dışarıdaki veri her durumda korundu; hata testin kendi durumundaydı | Yeniden tasarım sonrası **son tam koşu** (nadir rastgele dizi) | Her örnek taze jail + `finally` temizliği; değişmez netleştirildi; deterministik regresyon testi (bağı sil + aynı adla klasör aç, özyinelemeli ve değil) |
+| 15 | Tasarımda CSS `uppercase` + `lang="tr"`, İngilizce araç başlıklarını Türkçe kurallarla büyütüyordu (“FİLE”, “TİME”) | Ekran görüntüsü + `test_approval_card_keeps_the_english_tool_title_unshouted` / `test_tool_titles_in_the_tools_tab_use_english_casing_rules` | İngilizce başlıklara `lang="en"` |
+| 16 | İki arayüzü aynı testte ayağa kaldırmak sabit bağlantı noktasında çakışıyordu | Yeni E2E testleri | Her arayüz için `free_port()` |
+| 17 | Karşılama ekranı 1280×860'ta taşıyor, mesaj kutusu iki satıra kırılıyor, MCP dairesi kartı kesiyordu | Ekran görüntüleri + `test_hero_and_composer_fit_a_laptop_screen_without_scrolling` | Kolaj/başlık/çipler yeniden ölçeklendi; kolaj `em` birimli |
 
 ## 5. Güvenlik doğrulama özeti
 
@@ -124,7 +128,8 @@ Aşağıdakilerin hepsi düzeltildi ve her biri için kalıcı bir test var.
 4. `~/Documents` altı çalışma alanı için macOS “Dosyalar ve Klasörler” izin istemi.
 5. Türkçe dosya adlarıyla (Finder'da oluşturulmuş, NFD) `fs_list`/`fs_read` — kod NFC normalleştirir, APFS ile gerçek denemesi sizde.
 6. İsteğe bağlı: Takvim.app'ten `.ics` dışa aktarıp `calendar_import_ics` ile içe aktarma.
-7. İsteğe bağlı: Claude Desktop ile `localasistan desktop-config` çıktısı.
+7. İsteğe bağlı: Claude Desktop ile `localasistan desktop-config` çıktısı (API anahtarı gerektirmez; adımlar README'de). Bu ortamda Claude Desktop çalıştırılamadı; sunucu protokol düzeyinde mcp 1.30 ve 2.x istemcileriyle stdio üzerinden doğrulandı.
+8. Yeni arayüzün Safari'de görünümü (`backdrop`/`:focus-within`/`clamp()` kullanılır; testler Chromium'da). Anton başlık yazı tipi uygulamayla birlikte gelir, internet gerekmez.
 
 ## 7. Bilinen sınırlar (bilinçli)
 

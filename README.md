@@ -4,6 +4,8 @@ Yerel **dosya**, **takvim** ve **veritabanı** araçlarını bir LLM'e (Claude) 
 üzerinden açan, baştan sona kendi yazdığımız bir uygulama: **MCP sunucusu** + **MCP istemcisi / ajan döngüsü** + **basit web arayüzü**.
 Mac'te tek komutla çalışır; dışarıya yalnızca LLM çağrısı çıkar, veriniz makinenizde kalır.
 
+![ana sayfa](docs/img/ana-sayfa.png)
+
 | Sohbet (araç çağrıları, markdown) | Yıkıcı işlemde onay | Araçlar sekmesi (LLM'siz deneme) |
 |---|---|---|
 | ![sohbet](docs/img/sohbet.png) | ![onay](docs/img/onay.png) | ![araçlar](docs/img/araclar.png) |
@@ -14,17 +16,20 @@ Mac'te tek komutla çalışır; dışarıya yalnızca LLM çağrısı çıkar, v
   Her araç `readOnly / destructive / idempotent` annotation'ı taşır. Eski ve yeni MCP el sıkışmalarını konuşur; Claude Desktop gibi başka istemcilerle de çalışır.
 - **MCP istemcisi + ajan döngüsü:** sunucuyu alt süreç olarak başlatır, araçları Claude'a verir, akışlı yanıt, araç çağrısı, onay, hata ve iptal durumlarını yönetir.
   Sunucu çökerse sonraki çağrıda kendini toparlar.
-- **Web arayüzü** (kurulum gerektirmeyen, build adımsız): Sohbet · Araçlar (LLM'siz elle çağırma) · Kaynaklar & Promptlar · Durum. Koyu mod ve mobil uyumlu.
+- **Web arayüzü** (build adımsız, bağımlılıksız): Sohbet · Araçlar (LLM'siz elle çağırma) · Kaynaklar & Promptlar · Durum.
+  Siyah zemin üzerinde fosforlu sarı vurgu; yüzen mesaj kutusunda **`+`** (örnek görevler ve MCP promptları) ve **`@`** (çalışma alanından dosya ekle)
+  menüleri, üstte durum şeridi, başlık yazı tipi (Anton, OFL) uygulamayla birlikte gelir (internet gerekmez). Mobil uyumlu, `prefers-reduced-motion` destekli.
 - **Güvenlik:** dosya sandbox'ı, salt-okunur SQL, yıkıcı işlemler için onay, yerel-ürün web güvenliği (aşağıda).
 - **Takvim:** saat dilimi/DST doğru, çakışma denetimli, boş zaman bulma, `.ics` içe/dışa aktarım (Apple Takvim ile uyumlu).
 - **Türkçe duyarlı:** `ÇALIŞMA` ↔ `çalışma` ve `İ/I/ı/i` aramalarda eşleşir; dosya adlarındaki Türkçe karakterler macOS'ta (NFD/NFC) doğru çalışır.
 
 ## Hızlı başlangıç (macOS)
 
-Gereksinim: **Python 3.11+** (yoksa: `brew install python@3.12` ya da `brew install uv`) ve bir [Anthropic API anahtarı](https://console.anthropic.com).
+Gereksinim: **Python 3.11+** (yoksa: `brew install python@3.12` ya da `brew install uv`) ve — yalnızca bu uygulamanın kendi sohbet arayüzü için —
+bir [Anthropic API anahtarı](https://console.anthropic.com). Anahtarınız yoksa bkz. [API anahtarı olmadan kullanım](#api-anahtarı-olmadan-kullanım).
 
 ```bash
-git clone https://github.com/zeydlcn/localasistanmcp.git && cd localasistanmcp
+git clone -b feature/mcp-server-client https://github.com/ZEYDLCN/LocalAsistanMcp.git && cd LocalAsistanMcp
 ./scripts/setup.sh            # sanal ortam + bağımlılıklar + .env + kurulum denetimi
 open -e .env                  # ANTHROPIC_API_KEY=sk-ant-... satırını doldurun
 ./scripts/run.sh              # arayüz açılır: http://127.0.0.1:8765
@@ -51,6 +56,17 @@ Kurulumu doğrulamak için (ikincisi **gerçek bir API çağrısı** yapar, birk
 > **İlk canlı deneme notu:** Bu proje geliştirilirken gerçek bir Anthropic anahtarı kullanılamadı; LLM katmanı gerçek SDK + sahte HTTP ile
 > doğrulandı (istek gövdesi, başlıklar, SSE ayrıştırma, düşünme bloklarının geri yansıtılması). `doctor --llm` bu yüzden ilk canlı smoke testinizdir.
 > Bir API hatası görürseniz mesaj arayüzde/terminalde açıkça yazar; sunucu tarafı yedek model kaynaklı ise `LOCALASISTAN_REFUSAL_FALLBACK=0` deneyin.
+
+### API anahtarı olmadan kullanım
+
+MCP sunucusu bağımsızdır; LLM'i başka bir istemci sağlayabilir. Anahtar gerektirmeyen yollar:
+
+| Yol | LLM | Nasıl |
+|---|---|---|
+| **Claude Desktop** | Claude hesabınız | [aşağıda](#claude-desktop-ve-diğer-mcp-istemcileri-ile-kullanma) |
+| **Claude Code** | Claude hesabınız | `claude mcp add localasistan -- $(pwd)/.venv/bin/python -m localasistan.server` |
+| **Araçlar sekmesi** (`./scripts/run.sh`) | yok | Her aracı elle çalıştırın; “Çalıştır” düğmesi sizin onayınızdır |
+| **Komut satırı** | yok | `.venv/bin/localasistan tools` · `.venv/bin/localasistan call calendar_now` · `call db_query sql="select * from giderler limit 5"` |
 
 ### Örnek istekler
 
@@ -162,8 +178,11 @@ Sunucu bağımsız bir MCP sunucusudur. Yapılandırma parçasını üretin:
 .venv/bin/localasistan desktop-config
 ```
 
-Çıktıyı `~/Library/Application Support/Claude/claude_desktop_config.json` içine ekleyip Claude Desktop'u yeniden başlatın. (Bu durumda onay, istemcinin kendi
-araç-onay akışıyla yapılır; sunucudaki annotation'lar ona rehberlik eder.)
+Çıktıyı `~/Library/Application Support/Claude/claude_desktop_config.json` içine ekleyin (dosyada başka sunucular varsa üzerine yazmayın; yalnızca
+`"localasistan": {…}` bloğunu mevcut `mcpServers` içine koyun). Ardından Claude Desktop'u **Cmd+Q ile tamamen kapatıp** yeniden açın.
+Bu durumda onay, istemcinin kendi araç-onay akışıyla yapılır; sunucudaki annotation'lar ona rehberlik eder.
+Çalışma alanı `~/Documents` altındaysa macOS dosya iznini Terminal'e değil **Claude Desktop'a** verin. Araçlar görünmezse Desktop'un
+Ayarlar → Geliştirici bölümündeki `localasistan` günlüğüne bakın.
 
 ## Takvim notları
 

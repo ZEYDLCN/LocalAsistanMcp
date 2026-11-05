@@ -152,7 +152,7 @@ Her faz: **çıktı → kabul kriteri → ayrı commit.**
 | 2 MCP sunucusu | ✅ | 25 araç · 5 kaynak/şablon · 3 prompt; SQL 4 katmanlı koruma; takvim + ICS |
 | 3 MCP istemcisi | ✅ | `McpHub` (toparlanma, zaman aşımı, yan etkili araç = otomatik tekrar yok) |
 | 4 Ajan döngüsü | ✅ | Claude `claude-opus-5-5`, akış, onay, iptal güvenliği, gerçek SDK ile doğrulandı |
-| 5 Web arayüzü | ✅ | Starlette + SSE + bağımlılıksız SPA; güvenlik ara katmanı; Playwright testleri |
+| 5 Web arayüzü | ✅ | Starlette + SSE + bağımlılıksız SPA; güvenlik ara katmanı; Playwright testleri. Siyah + fosforlu sarı yeniden tasarım: durum şeridi, eğik kart kolajı, yerel Anton başlık yazı tipi, yüzen mesaj kutusu, `+`/`@` menüleri |
 | 6 CLI / Mac / dokümantasyon | ✅ | `localasistan` komutları, `doctor --llm`, kurulum betikleri, README |
 | 7 QA | ✅ | Bkz. [`QA.md`](QA.md): katmanlı testler, özellik-tabanlı testler, mutasyon denetimi, Python 3.11–3.13 |
 | 8 Yayın | ✅ | Commit geçmişi denetimi, feature branch push |
