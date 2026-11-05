@@ -65,7 +65,9 @@ def make_ui(browser, web_settings, workspace):
     cleanup = []
 
     def factory(*, provider: ScriptedProvider | None = None, hub_target=None, viewport=None, **overrides) -> UI:
-        cfg = web_settings.with_overrides(**overrides) if overrides else web_settings
+        from tests.support import free_port
+
+        cfg = web_settings.with_overrides(port=free_port(), **overrides)  # her arayüz kendi portunda
         prov = provider or ScriptedProvider([])
         target = hub_target or StdioServerParameters(
             command=sys.executable, args=["-m", "localasistan.server"], env=cfg.server_env()

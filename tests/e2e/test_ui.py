@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from playwright.sync_api import expect
@@ -49,6 +50,8 @@ class TestPageLoad:
 
     def test_mobile_layout_has_no_horizontal_scroll(self, make_ui):
         ui = make_ui(viewport={"width": 375, "height": 740})
+        ui.page.wait_for_timeout(300)
+        ui.shot("09-mobile-home")
         for tab in ("chat", "tools", "resources", "status"):
             ui.page.click(f"#tabbtn-{tab}")
             ui.page.wait_for_timeout(150)
@@ -411,3 +414,164 @@ def test_json_roundtrip_of_transcript_endpoint(make_ui):
     sid = ui.page.evaluate("sessionStorage.getItem('la.session')")
     data = json.loads(ui.page.evaluate(f"fetch('/api/chat/{sid}').then(r => r.text())"))
     assert data["transcript"][0] == {"type": "user_message", "text": "x"}
+
+
+class TestDesignAndComposer:
+    def test_ticker_follows_the_real_state(self, make_ui):
+        ui = make_ui()
+        ticker = ui.page.locator("#ticker")
+        expect(ui.page.locator("#ticker-text")).to_contain_text("Hazır · 25 araç")
+        expect(ticker).to_have_class("ticker")
+        ui.page.select_option("#policy-select", "auto")
+        expect(ticker).to_have_class("ticker warn")
+        expect(ui.page.locator("#ticker-text")).to_contain_text("onay kapalı")
+        ui.page.select_option("#policy-select", "ask_destructive")
+        expect(ticker).to_have_class("ticker")
+        ui.page.click("#ticker-btn")
+        expect(ui.page.locator("#tab-status")).to_be_visible()
+
+    def test_ticker_signals_a_dead_mcp_server_and_a_missing_key(self, make_ui):
+        from mcp import StdioServerParameters
+
+        down = make_ui(hub_target=StdioServerParameters(command="/definitely/missing", args=[]))
+        expect(down.page.locator("#ticker")).to_have_class("ticker bad")
+        expect(down.page.locator("#ticker-text")).to_contain_text("MCP sunucusu bağlı değil")
+        keyless = make_ui(provider=ScriptedProvider([], configured=False))
+        expect(keyless.page.locator("#ticker")).to_have_class("ticker warn")
+        expect(keyless.page.locator("#ticker-text")).to_contain_text("ANTHROPIC_API_KEY")
+
+    def test_display_font_is_self_hosted_and_covers_turkish_letters(self, make_ui):
+        ui = make_ui()
+        response = ui.page.request.get(f"{ui.url}/static/fonts/anton-latin-ext-400-normal.woff2")
+        assert response.status == 200 and "font" in response.headers["content-type"]
+        ui.page.evaluate("document.fonts.ready")
+        assert ui.page.evaluate("document.fonts.check('40px Anton', 'İŞĞÜÖÇ')")
+        assert ui.page.evaluate("document.fonts.check('40px Anton', 'şğı')")
+        family = ui.page.evaluate("getComputedStyle(document.querySelector('.display')).fontFamily")
+        assert "Anton" in family
+        assert ui.page.evaluate("getComputedStyle(document.querySelector('.display')).textTransform") == "uppercase"
+        assert ui.errors == [], ui.errors  # CSP font yüklemesini engellemedi
+
+    def test_hero_and_composer_fit_a_laptop_screen_without_scrolling(self, make_ui):
+        ui = make_ui(viewport={"width": 1280, "height": 860})
+        ui.page.wait_for_timeout(300)
+        metrics = ui.page.evaluate(
+            "(() => { const m = document.querySelector('#messages'); const h = document.querySelector('#empty');"
+            " const c = document.querySelector('#composer'); return {scroll: m.scrollHeight, client: m.clientHeight,"
+            " hero: h.getBoundingClientRect().height, composer: c.getBoundingClientRect().height}; })()"
+        )
+        assert metrics["scroll"] <= metrics["client"] + 2, metrics
+        send, model = ui.page.locator("#send").bounding_box(), ui.page.locator("#model-chip").bounding_box()
+        assert abs((send["y"] + send["height"] / 2) - (model["y"] + model["height"] / 2)) < 30  # aynı satır
+        collage = ui.page.locator(".collage").bounding_box()
+        assert collage["x"] >= 0 and collage["x"] + collage["width"] <= 1280
+
+    def test_plus_menu_inserts_examples_and_ready_made_prompts(self, make_ui):
+        ui = make_ui()
+        ui.page.click("#btn-plus")
+        popover = ui.page.locator("#popover")
+        expect(popover).to_be_visible()
+        expect(ui.page.locator("#btn-plus")).to_have_attribute("aria-expanded", "true")
+        expect(popover.get_by_role("menuitem", name="Daily briefing")).to_be_visible()
+        expect(popover.get_by_role("menuitem", name="Summarise a file")).to_contain_text("gerekli: path")
+        ui.shot("10-plus-menu")
+        popover.get_by_role("menuitem", name="Bugünkü takvimimi özetle").click()
+        expect(popover).to_be_hidden()
+        expect(ui.page.locator("#input")).to_have_value("Bugünkü takvimimi özetle")
+        ui.page.fill("#input", "")
+        ui.page.click("#btn-plus")
+        ui.page.get_by_role("menuitem", name="Daily briefing").click()
+        expect(ui.page.locator("#input")).to_have_value(re.compile("calendar_now"))
+        ui.page.click("#btn-plus")
+        ui.page.keyboard.press("Escape")
+        expect(popover).to_be_hidden()
+
+    def test_at_menu_mentions_workspace_files_and_filters(self, make_ui):
+        ui = make_ui()
+        (ui.workspace / "notlar").mkdir()
+        (ui.workspace / "notlar" / "plan.md").write_text("# plan")
+        (ui.workspace / "notlar" / "çay.txt").write_text("x")
+        (ui.workspace / "rapor.txt").write_text("x")
+        ui.page.fill("#input", "özetle")
+        ui.page.click("#btn-at")
+        popover = ui.page.locator("#popover")
+        expect(popover.get_by_role("menuitem")).to_have_count(3)
+        ui.shot("11-at-menu")
+        popover.get_by_placeholder("Dosya ara…").fill("PLAN")
+        expect(popover.get_by_role("menuitem")).to_have_count(1)
+        popover.get_by_role("menuitem", name="notlar/plan.md").click()
+        expect(ui.page.locator("#input")).to_have_value("özetle @notlar/plan.md")
+        ui.page.click("#btn-at")
+        popover.get_by_placeholder("Dosya ara…").fill("yok böyle dosya")
+        expect(popover).to_contain_text("Eşleşen dosya yok")
+        ui.page.click("body", position={"x": 5, "y": 400})  # dışarı tıklayınca kapanır
+        expect(popover).to_be_hidden()
+
+    def test_at_mention_reaches_the_model_unchanged(self, make_ui):
+        ui = make_ui(provider=ScriptedProvider([Step(text="tamam")]))
+        (ui.workspace / "a.md").write_text("içerik")
+        ui.page.click("#btn-at")
+        ui.page.get_by_role("menuitem", name="a.md").click()
+        ui.page.keyboard.type(" oku")
+        ui.page.press("#input", "Enter")
+        expect(ui.page.locator(".msg.assistant")).to_have_text("tamam")
+        assert ui.provider.calls[0]["messages"][0]["content"] == "@a.md oku"
+        assert "@notlar/plan.md" in ui.provider.calls[0]["system"]
+
+    def test_tip_card_can_be_dismissed_and_stays_dismissed(self, make_ui):
+        ui = make_ui()
+        expect(ui.page.locator("#tip")).to_be_visible()
+        ui.page.click("#tip-close")
+        expect(ui.page.locator("#tip")).to_be_hidden()
+        ui.page.reload()
+        expect(ui.page.locator("#empty")).to_be_visible()
+        expect(ui.page.locator("#tip")).to_be_hidden()
+
+    def test_tip_button_opens_the_examples_menu(self, make_ui):
+        ui = make_ui()
+        ui.page.click("#tip-examples")
+        expect(ui.page.locator("#popover")).to_be_visible()
+        expect(ui.page.get_by_role("menuitem", name="Bugünkü takvimimi özetle")).to_be_visible()
+
+    def test_textarea_grows_with_content_and_resets_after_sending(self, make_ui):
+        ui = make_ui(provider=ScriptedProvider([Step(text="ok")]))
+        before = ui.page.locator("#input").bounding_box()["height"]
+        ui.page.fill("#input", "\n".join(f"satır {i}" for i in range(8)))
+        grown = ui.page.locator("#input").bounding_box()["height"]
+        assert grown > before + 60 and grown <= 222
+        ui.page.press("#input", "Enter")
+        expect(ui.page.locator(".msg.assistant")).to_have_text("ok")
+        assert ui.page.locator("#input").bounding_box()["height"] <= before + 2
+
+    def test_approval_card_keeps_the_english_tool_title_unshouted(self, make_ui):
+        ui = make_ui()
+        (ui.workspace / "x.txt").write_text("1")
+        ui.provider.steps += [Step(tools=[("fs_delete", {"path": "x.txt"})]), Step(text="bitti")]
+        send(ui.page, "sil")
+        title = ui.page.locator(".approval-tool")
+        expect(title).to_have_text("Delete file or folder")
+        assert ui.page.evaluate("getComputedStyle(document.querySelector('.approval-tool')).textTransform") == "none"
+        assert (
+            ui.page.evaluate("getComputedStyle(document.querySelector('.approval strong')).textTransform")
+            == "uppercase"
+        )
+        ui.page.get_by_role("button", name="Reddet").click()
+        wait_idle(ui.page)
+
+    def test_tool_titles_in_the_tools_tab_use_english_casing_rules(self, make_ui):
+        ui = make_ui()
+        ui.page.click("#tabbtn-tools")
+        ui.page.click("#tool-list button:has-text('calendar_now')")
+        assert ui.page.locator("#tool-detail h3").get_attribute("lang") == "en"
+
+    def test_reduced_motion_disables_animations(self, make_ui, browser):
+        ui = make_ui()
+        ui.page.emulate_media(reduced_motion="reduce")
+        ui.workspace.joinpath("y.txt").write_text("1")
+        ui.provider.steps += [Step(tools=[("fs_delete", {"path": "y.txt"})]), Step(text="x")]
+        send(ui.page, "sil")
+        approval = ui.page.locator(".approval")
+        expect(approval).to_be_visible()
+        assert ui.page.evaluate("getComputedStyle(document.querySelector('.approval')).animationName") == "none"
+        ui.page.get_by_role("button", name="Reddet").click()
+        wait_idle(ui.page)

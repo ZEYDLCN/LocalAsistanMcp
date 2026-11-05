@@ -35,7 +35,7 @@ localasistan = "localasistan.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-localasistan = ["web/static/*"]
+localasistan = ["web/static/*", "web/static/fonts/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

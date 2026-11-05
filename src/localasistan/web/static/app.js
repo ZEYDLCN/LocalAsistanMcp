@@ -153,11 +153,13 @@ async function refreshStatus() {
     state.status = null;
     setMcpIndicator("off", err.message);
     renderStatusTab(err.message);
+    renderTicker();
     return;
   }
   const s = state.status;
   $("#version").textContent = `v${s.version}`;
   $("#model-chip").textContent = s.llm.model;
+  $("#effort-chip").textContent = s.llm.thinking ? `düşünme: ${s.llm.effort}` : "düşünme kapalı";
   $("#policy-select").value = s.approval.policy;
   setMcpIndicator(s.mcp.connected ? "on" : "off", s.mcp.connected ? `Bağlı · ${s.mcp.tool_count ?? "?"} araç` : (s.mcp.last_error || "MCP sunucusu bağlı değil"));
   const banner = $("#banner");
@@ -168,6 +170,25 @@ async function refreshStatus() {
     banner.classList.add("hidden");
   }
   renderStatusTab();
+  renderTicker();
+}
+
+/* Üstteki fosforlu şerit: en önemli durumu tek cümlede söyler (hazır / uyarı / sorun). */
+function renderTicker() {
+  const s = state.status;
+  const bar = $("#ticker");
+  const text = $("#ticker-text");
+  bar.className = "ticker";
+  if (!s) { bar.classList.add("bad"); text.textContent = "Sunucuya ulaşılamıyor. Uygulama çalışıyor mu?"; return; }
+  if (!s.mcp.connected) {
+    bar.classList.add("bad");
+    text.textContent = `MCP sunucusu bağlı değil${s.mcp.last_error ? `: ${s.mcp.last_error}` : ""}`;
+    return;
+  }
+  if (s.approval.policy === "auto") { bar.classList.add("warn"); text.textContent = "Dikkat: onay kapalı. Yıkıcı araçlar sormadan çalışır."; return; }
+  if (!s.llm.configured) { bar.classList.add("warn"); text.textContent = "Sohbet kapalı: ANTHROPIC_API_KEY eksik. Araçlar sekmesi çalışır."; return; }
+  const policy = { ask_destructive: "yıkıcı işlemlerde onay", ask_writes: "her yazmada onay" }[s.approval.policy];
+  text.textContent = `Hazır · ${s.mcp.tool_count ?? "?"} araç · ${s.environment.timezone} · ${policy}`;
 }
 
 function setMcpIndicator(kind, text) {
@@ -289,7 +310,7 @@ function addApproval(ev) {
   const approve = el("button", { class: "primary small", type: "button", text: "Onayla" });
   const reject = el("button", { class: "ghost small", type: "button", text: "Reddet" });
   const node = el("div", { class: "approval", role: "group", "aria-label": `${ev.name} onayı`, "data-approval": ev.approval_id },
-    el("strong", { text: `Onay gerekiyor: ${ev.title || ev.name}` }),
+    el("div", { class: "approval-head" }, el("strong", { text: "Onay gerekiyor" }), el("span", { class: "approval-tool", text: ev.title || ev.name })),
     el("pre", { text: prettyJson(ev.input) }),
     el("div", { class: "approval-actions" }, approve, reject, status));
   const answer = async (value) => {
@@ -444,6 +465,7 @@ async function loadTranscript() {
 
 async function newChat() {
   if (state.busy) return;
+  closeMenu();
   const old = state.session;
   rememberSession(null);
   state.cards.clear();
@@ -552,7 +574,7 @@ function selectTool(name) {
     } finally { runButton.disabled = false; }
   });
   pane.replaceChildren(
-    el("h3", { text: tool.title || tool.name }),
+    el("h3", { text: tool.title || tool.name, lang: "en" }),
     el("p", {}, el("span", { class: `badge ${tool.kind}`, text: KIND_LABEL[tool.kind] || tool.kind }), tool.needs_approval ? el("span", { class: "muted", text: "  · sohbette onay ister" }) : null),
     el("p", { class: "muted", text: tool.description }),
     form, output);
@@ -617,6 +639,97 @@ function promptCard(p) {
     el("div", { class: "approval-actions" }, ...inputs.map((x) => x.input), preview, use));
 }
 
+/* ---------------------------------------------------------------- Komut çubuğu: metin alanı ve menüler */
+function autosize() {
+  const area = $("#input");
+  area.style.height = "auto";
+  area.style.height = `${Math.min(area.scrollHeight, 220)}px`;
+}
+
+function insertAtCursor(text) {
+  const area = $("#input");
+  const start = area.selectionStart ?? area.value.length;
+  const end = area.selectionEnd ?? start;
+  const before = area.value.slice(0, start);
+  const separator = before && !/\s$/.test(before) ? " " : "";
+  area.value = before + separator + text + area.value.slice(end);
+  const caret = (before + separator + text).length;
+  area.setSelectionRange(caret, caret);
+  area.focus();
+  autosize();
+}
+
+let openMenu = null;
+function closeMenu() {
+  openMenu = null;
+  const box = $("#popover");
+  box.classList.add("hidden");
+  box.replaceChildren();
+  for (const id of ["#btn-plus", "#btn-at"]) $(id).setAttribute("aria-expanded", "false");
+}
+
+function menuButton(label, hint, onclick, { disabled = false } = {}) {
+  return el("button", { type: "button", role: "menuitem", disabled, onclick }, el("span", { text: label }), hint ? el("small", { text: hint }) : null);
+}
+
+async function toggleMenu(kind) {
+  if (openMenu === kind) { closeMenu(); return; }
+  closeMenu();
+  openMenu = kind;
+  const box = $("#popover");
+  box.classList.remove("hidden");
+  $(kind === "plus" ? "#btn-plus" : "#btn-at").setAttribute("aria-expanded", "true");
+  if (kind === "plus") await fillPlusMenu(box);
+  else await fillFileMenu(box);
+}
+
+async function fillPlusMenu(box) {
+  const pick = (text) => () => { closeMenu(); $("#input").value = text; autosize(); $("#input").focus(); };
+  box.replaceChildren(el("h4", { text: "Örnek görevler" }), ...EXAMPLES.map((text) => menuButton(text, "", pick(text))));
+  try {
+    const data = await api("/api/prompts");
+    if (openMenu !== "plus") return;
+    box.append(el("h4", { text: "MCP promptları" }));
+    for (const prompt of data.prompts) {
+      const needs = prompt.arguments.filter((a) => a.required).map((a) => a.name);
+      if (needs.length) {
+        box.append(menuButton(prompt.title || prompt.name, `gerekli: ${needs.join(", ")}`, () => { closeMenu(); showTab("resources"); }));
+      } else {
+        box.append(menuButton(prompt.title || prompt.name, "ekle", async () => {
+          closeMenu();
+          try {
+            const rendered = await api(`/api/prompts/${encodeURIComponent(prompt.name)}`, { method: "POST", body: { arguments: {} } });
+            $("#input").value = rendered.messages.map((m) => m.text).join("\n\n");
+            autosize();
+            $("#input").focus();
+          } catch (err) { addNote(err.message, "error"); }
+        }));
+      }
+    }
+  } catch (_) { /* promptlar alınamadı: örnek görevler yeterli */ }
+}
+
+async function fillFileMenu(box) {
+  const filter = el("input", { type: "search", placeholder: "Dosya ara…", "aria-label": "Dosya ara" });
+  const list = el("div", {}, el("div", { class: "empty-note", text: "Dosyalar okunuyor…" }));
+  box.replaceChildren(el("h4", { text: "Çalışma alanından dosya" }), filter, list);
+  let files = [];
+  try {
+    const outcome = await api("/api/tools/fs_list/call", { method: "POST", body: { arguments: { path: ".", recursive: true, max_entries: 300 } } });
+    files = ((outcome.data && outcome.data.entries) || []).filter((e) => e.type === "file");
+  } catch (err) { list.replaceChildren(el("div", { class: "empty-note", text: err.message })); return; }
+  const draw = () => {
+    const needle = filter.value.trim().toLowerCase();
+    const shown = files.filter((f) => f.path.toLowerCase().includes(needle)).slice(0, 60);
+    list.replaceChildren(...(shown.length
+      ? shown.map((f) => menuButton(f.path, `${f.size_bytes ?? 0} B`, () => { closeMenu(); insertAtCursor(`@${f.path}`); }))
+      : [el("div", { class: "empty-note", text: files.length ? "Eşleşen dosya yok." : "Çalışma alanı boş. “localasistan seed” ile örnek veri yükleyebilirsiniz." })]));
+  };
+  filter.addEventListener("input", draw);
+  draw();
+  filter.focus();
+}
+
 /* ---------------------------------------------------------------- Başlatma */
 function init() {
   for (const btn of $$(".tabs button")) btn.addEventListener("click", () => showTab(btn.dataset.tab));
@@ -629,8 +742,22 @@ function init() {
     const text = input.value;
     if (!text.trim()) return;
     input.value = "";
+    autosize();
+    closeMenu();
     sendMessage(text);
   });
+  $("#input").addEventListener("input", autosize);
+  $("#btn-plus").addEventListener("click", () => toggleMenu("plus"));
+  $("#btn-at").addEventListener("click", () => toggleMenu("at"));
+  $("#ticker-btn").addEventListener("click", () => showTab("status"));
+  $("#tip-examples").addEventListener("click", (event) => { event.stopPropagation(); toggleMenu("plus"); });
+  $("#tip-close").addEventListener("click", () => {
+    $("#tip").classList.add("hidden");
+    try { localStorage.setItem("la.tip", "closed"); } catch (_) { /* gizli mod */ }
+  });
+  try { if (localStorage.getItem("la.tip") === "closed") $("#tip").classList.add("hidden"); } catch (_) { /* gizli mod */ }
+  document.addEventListener("click", (event) => { if (openMenu && !event.target.closest("#popover, #btn-plus, #btn-at")) closeMenu(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && openMenu) { closeMenu(); $("#input").focus(); } });
   $("#input").addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); $("#composer").requestSubmit(); }
   });

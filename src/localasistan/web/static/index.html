@@ -3,30 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <title>LocalAsistan</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/fonts/anton-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="logo" aria-hidden="true">◈</span> LocalAsistan <small id="version"></small></div>
+  <div id="ticker" class="ticker" role="status">
+    <svg class="ticker-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12 12 3h8a1 1 0 0 1 1 1v8l-9 9z" class="s-ink"/><circle cx="16" cy="8" r="1.6" class="f-lime"/></svg>
+    <span id="ticker-text" class="ticker-text">Başlatılıyor…</span>
+    <button type="button" id="ticker-btn" class="pill-white">Durum</button>
+  </div>
+
+  <header class="nav">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" class="f-lime"/><path d="M16 6.5 25.5 16 16 25.5 6.5 16z" class="s-ink-2 f-none"/><circle cx="16" cy="16" r="3" class="f-ink"/></svg>
+      <span class="brand-name">LocalAsistan</span><small id="version"></small>
+    </div>
     <nav class="tabs" role="tablist" aria-label="Bölümler">
       <button role="tab" data-tab="chat" id="tabbtn-chat" aria-selected="true" aria-controls="tab-chat">Sohbet</button>
       <button role="tab" data-tab="tools" id="tabbtn-tools" aria-selected="false" aria-controls="tab-tools">Araçlar</button>
       <button role="tab" data-tab="resources" id="tabbtn-resources" aria-selected="false" aria-controls="tab-resources">Kaynaklar &amp; Promptlar</button>
       <button role="tab" data-tab="status" id="tabbtn-status" aria-selected="false" aria-controls="tab-status">Durum</button>
     </nav>
-    <div class="statusbar">
+    <div class="conn">
       <span id="mcp-dot" class="dot dot-off" role="img" aria-label="MCP bağlantısı"></span>
       <span id="mcp-label" class="muted">MCP</span>
-      <span id="model-chip" class="chip" title="Model"></span>
-      <label class="policy" title="Hangi araçların çalışmadan önce onay isteyeceği">Onay
-        <select id="policy-select" aria-label="Onay politikası">
-          <option value="ask_destructive">Yalnızca yıkıcı işlemler</option>
-          <option value="ask_writes">Her yazma işlemi</option>
-          <option value="auto">Hiçbir zaman (dikkat)</option>
-        </select>
-      </label>
     </div>
   </header>
 
@@ -34,27 +37,98 @@
     <section id="tab-chat" class="tab active" role="tabpanel" aria-labelledby="tabbtn-chat">
       <div id="banner" class="banner hidden" role="alert"></div>
       <div id="messages" class="messages" aria-live="polite">
-        <div id="empty" class="empty">
-          <h2>Merhaba 👋</h2>
-          <p>Yerel dosyalarınızı, takviminizi ve veritabanınızı sizin için kullanabilirim.</p>
+        <section id="empty" class="hero">
+          <div id="tip" class="tip">
+            <span class="tip-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5z" class="s-white f-none"/></svg></span>
+            <span class="tip-copy"><strong>Nereden başlayacağını bilmiyor musun?</strong><small>Hazır görevlerle başla, asistan araçları kendisi kullanır.</small></span>
+            <button type="button" id="tip-examples" class="pill-white">Örnekler</button>
+            <button type="button" id="tip-close" class="icon-btn" aria-label="İpucunu kapat">✕</button>
+          </div>
+
+          <div class="collage" aria-hidden="true">
+            <div class="cc cc-files">
+              <svg viewBox="0 0 120 112">
+                <path d="M8 22h32l8 9h64v69a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z" class="f-panel s-lime"/>
+                <rect x="20" y="46" width="78" height="7" rx="3.5" class="f-lime"/>
+                <rect x="20" y="62" width="60" height="6" rx="3" class="f-dim"/>
+                <rect x="20" y="75" width="70" height="6" rx="3" class="f-dim"/>
+                <rect x="20" y="88" width="44" height="6" rx="3" class="f-dim"/>
+              </svg>
+              <b>Dosyalar</b><i>notlar/gün.md</i>
+            </div>
+            <div class="cc cc-cal">
+              <svg viewBox="0 0 120 112">
+                <rect x="6" y="10" width="108" height="96" rx="10" class="f-panel s-dim"/>
+                <rect x="6" y="10" width="108" height="22" rx="10" class="f-lime"/>
+                <g class="f-dim">
+                  <rect x="16" y="42" width="14" height="12" rx="3"/><rect x="36" y="42" width="14" height="12" rx="3"/><rect x="56" y="42" width="14" height="12" rx="3"/><rect x="76" y="42" width="14" height="12" rx="3"/><rect x="96" y="42" width="8" height="12" rx="3"/>
+                  <rect x="16" y="60" width="14" height="12" rx="3"/><rect x="36" y="60" width="14" height="12" rx="3"/><rect x="76" y="60" width="14" height="12" rx="3"/><rect x="96" y="60" width="8" height="12" rx="3"/>
+                </g>
+                <rect x="56" y="60" width="14" height="12" rx="3" class="f-lime"/>
+                <rect x="16" y="82" width="66" height="14" rx="7" class="f-lime-soft s-lime"/>
+              </svg>
+              <b>Takvim</b><i>Cuma 14:00</i>
+            </div>
+            <div class="cc cc-mcp">
+              <svg viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="46" class="f-none s-dim dash"/>
+                <circle cx="60" cy="60" r="28" class="f-none s-lime"/>
+                <path d="M60 60 100 38M60 60 24 88M60 60 90 98" class="s-lime-soft f-none"/>
+                <circle cx="60" cy="60" r="9" class="f-lime"/>
+                <circle cx="100" cy="38" r="6" class="f-white"/><circle cx="24" cy="88" r="6" class="f-white"/><circle cx="90" cy="98" r="6" class="f-white"/>
+              </svg>
+              <b>MCP</b>
+            </div>
+            <div class="cc cc-db">
+              <svg viewBox="0 0 120 112">
+                <ellipse cx="38" cy="26" rx="26" ry="9" class="f-panel s-lime"/>
+                <path d="M12 26v40c0 5 12 9 26 9s26-4 26-9V26" class="f-panel s-lime"/>
+                <path d="M12 46c0 5 12 9 26 9s26-4 26-9" class="f-none s-lime-soft"/>
+                <rect x="78" y="62" width="10" height="38" rx="3" class="f-dim"/>
+                <rect x="92" y="42" width="10" height="58" rx="3" class="f-lime"/>
+                <rect x="106" y="22" width="8" height="78" rx="3" class="f-white"/>
+              </svg>
+              <b>Veritabanı</b><i>giderler · 8 satır</i>
+            </div>
+          </div>
+
+          <h1 class="display"><span>Dosya. Takvim. Veritabanı.</span><em>Tek sohbette.</em></h1>
+          <p class="sub">Görevi anlat; asistan araçları kullansın. Yıkıcı işlemlerde son söz senin.</p>
           <div id="examples" class="examples"></div>
-        </div>
+        </section>
       </div>
+
       <form id="composer" class="composer" autocomplete="off">
-        <textarea id="input" rows="2" maxlength="20000" aria-label="Mesaj"
-          placeholder="Bir şey sorun ya da isteyin…  (Enter: gönder · Shift+Enter: yeni satır)"></textarea>
-        <div class="composer-actions">
-          <button type="button" id="new-chat" class="ghost">Yeni sohbet</button>
-          <span id="typing" class="muted hidden" aria-live="polite"></span>
-          <span class="spacer"></span>
-          <button type="button" id="stop" class="danger hidden">Durdur</button>
-          <button type="submit" id="send" class="primary">Gönder</button>
+        <textarea id="input" rows="1" maxlength="20000" aria-label="Mesaj"
+          placeholder="Görevi anlat…  (Enter: gönder · Shift+Enter: yeni satır)"></textarea>
+        <div class="composer-bar">
+          <div class="pills">
+            <button type="button" id="btn-plus" class="pill icon" aria-haspopup="true" aria-expanded="false" aria-label="Örnek görevler ve promptlar">+</button>
+            <button type="button" id="btn-at" class="pill icon" aria-haspopup="true" aria-expanded="false" aria-label="Çalışma alanından dosya ekle">@</button>
+            <span id="model-chip" class="pill model" title="Model"></span>
+            <label class="pill select-pill" title="Hangi araçların çalışmadan önce onay isteyeceği">
+              <span class="pill-label">Onay</span>
+              <select id="policy-select" aria-label="Onay politikası">
+                <option value="ask_destructive">Yıkıcı işlemler</option>
+                <option value="ask_writes">Her yazma</option>
+                <option value="auto">Hiçbiri (dikkat)</option>
+              </select>
+            </label>
+            <span id="effort-chip" class="pill" title="Düşünme çabası"></span>
+            <button type="button" id="new-chat" class="pill ghost-pill">↺ Yeni sohbet</button>
+          </div>
+          <div class="actions">
+            <span id="typing" class="typing hidden" aria-live="polite"></span>
+            <button type="button" id="stop" class="danger hidden">Durdur</button>
+            <button type="submit" id="send" class="send">Gönder</button>
+          </div>
         </div>
+        <div id="popover" class="popover hidden" role="menu"></div>
       </form>
     </section>
 
     <section id="tab-tools" class="tab" role="tabpanel" aria-labelledby="tabbtn-tools" hidden>
-      <p class="hint">MCP sunucusunun sunduğu araçları LLM olmadan, doğrudan deneyin. Buradaki "Çalıştır" düğmesi sizin açık onayınızdır.</p>
+      <p class="hint">MCP sunucusunun sunduğu araçları LLM olmadan, doğrudan deneyin. Buradaki “Çalıştır” düğmesi sizin açık onayınızdır.</p>
       <div class="split">
         <aside class="list-pane">
           <input id="tool-filter" type="search" placeholder="Araç ara…" aria-label="Araç ara">
@@ -67,14 +141,14 @@
     <section id="tab-resources" class="tab" role="tabpanel" aria-labelledby="tabbtn-resources" hidden>
       <div class="cols">
         <div>
-          <h3>Kaynaklar</h3>
+          <h3 class="section-title">Kaynaklar</h3>
           <ul id="resource-list" class="item-list"></ul>
-          <h3>Şablonlar</h3>
+          <h3 class="section-title">Şablonlar</h3>
           <div id="template-list"></div>
           <pre id="resource-view" class="viewer" aria-live="polite">Bir kaynak seçin.</pre>
         </div>
         <div>
-          <h3>Promptlar</h3>
+          <h3 class="section-title">Promptlar</h3>
           <div id="prompt-list"></div>
           <pre id="prompt-view" class="viewer" aria-live="polite">Bir prompt seçin.</pre>
         </div>
