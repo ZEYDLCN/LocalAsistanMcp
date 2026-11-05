@@ -575,3 +575,47 @@ class TestDesignAndComposer:
         assert ui.page.evaluate("getComputedStyle(document.querySelector('.approval')).animationName") == "none"
         ui.page.get_by_role("button", name="Reddet").click()
         wait_idle(ui.page)
+
+
+class TestOtherProviders:
+    """Anthropic dışı sağlayıcıda arayüz: düşünme çipi yok, doğru ayar adı görünür (ağ çağrısı yapılmaz)."""
+
+    BASE = "https://integrate.api.nvidia.com/v1"
+
+    def compat(self, web_settings, **changes):
+        from localasistan.client.openai_compat import OpenAICompatProvider
+
+        values = {"provider": "openai_compat", "base_url": self.BASE, "model": "z-ai/glm-5", **changes}
+        cfg = web_settings.with_overrides(**values)
+        return cfg, OpenAICompatProvider(cfg)
+
+    def test_a_configured_compat_provider_looks_ready_and_hides_the_effort_chip(self, make_ui, web_settings):
+        cfg, provider = self.compat(web_settings, api_key="nvapi-secret")
+        ui = make_ui(provider=provider, model=cfg.model, base_url=cfg.base_url)
+        expect(ui.page.locator("#model-chip")).to_have_text("z-ai/glm-5")
+        expect(ui.page.locator("#effort-chip")).to_be_hidden()
+        expect(ui.page.locator("#banner")).to_be_hidden()
+        expect(ui.page.locator("#ticker")).to_have_class("ticker")
+        ui.page.click("#tabbtn-status")
+        body = ui.page.locator("#status-body")
+        expect(body).to_contain_text("openai_compat")
+        expect(body).to_contain_text("tamam")
+        expect(body).not_to_contain_text("Düşünme çabası")
+        assert "nvapi-secret" not in ui.page.content()
+        assert ui.errors == [], ui.errors
+
+    def test_other_providers_keep_the_effort_chip(self, make_ui):
+        ui = make_ui()
+        expect(ui.page.locator("#effort-chip")).to_be_visible()
+        ui.page.click("#tabbtn-status")
+        expect(ui.page.locator("#status-body")).to_contain_text("Düşünme çabası")
+
+    def test_a_missing_model_names_the_setting_in_banner_ticker_and_chat_error(self, make_ui, web_settings):
+        cfg, provider = self.compat(web_settings, model="")
+        ui = make_ui(provider=provider, model="", base_url=cfg.base_url)
+        expect(ui.page.locator("#banner")).to_contain_text("LOCALASISTAN_MODEL")
+        expect(ui.page.locator("#ticker")).to_have_class("ticker warn")
+        expect(ui.page.locator("#ticker-text")).to_contain_text("LOCALASISTAN_MODEL")
+        send(ui.page, "merhaba")
+        expect(ui.page.locator(".note.error")).to_contain_text("localasistan models")
+        wait_idle(ui.page)

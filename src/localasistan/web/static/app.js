@@ -161,7 +161,7 @@ async function refreshStatus() {
   $("#model-chip").textContent = s.llm.model;
   const effortChip = $("#effort-chip");
   effortChip.textContent = s.llm.thinking ? `düşünme: ${s.llm.effort}` : "düşünme kapalı";
-  effortChip.classList.toggle("hidden", s.llm.provider !== "anthropic"); /* düşünme çabası yalnızca Anthropic için anlamlı */
+  effortChip.classList.toggle("hidden", s.llm.provider === "openai_compat"); /* düşünme çabası OpenAI uyumlu sunucularda yok */
   $("#policy-select").value = s.approval.policy;
   setMcpIndicator(s.mcp.connected ? "on" : "off", s.mcp.connected ? `Bağlı · ${s.mcp.tool_count ?? "?"} araç` : (s.mcp.last_error || "MCP sunucusu bağlı değil"));
   const banner = $("#banner");
@@ -222,7 +222,7 @@ function renderStatusTab(errorText) {
       ["Sağlayıcı", s.llm.provider],
       ["Model", s.llm.model],
       ["Yapılandırma", s.llm.configured ? "tamam" : `EKSİK: ${s.llm.missing || "ANTHROPIC_API_KEY"}`],
-      ...(s.llm.provider === "anthropic" ? [
+      ...(s.llm.provider !== "openai_compat" ? [
         ["Düşünme çabası (effort)", s.llm.effort],
         ["Uyarlanabilir düşünme", s.llm.thinking ? "açık" : "kapalı"],
         ["Ret durumunda yedek model", s.llm.refusal_fallback ? "açık" : "kapalı"],
