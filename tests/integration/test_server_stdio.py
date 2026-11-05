@@ -114,7 +114,10 @@ async def test_server_process_is_gone_after_client_exit(settings, stdio_params):
         await c.list_tools()
         running = _server_pids() - pids_before
         assert len(running) == 1
-    await asyncio.sleep(0.5)
+    for _ in range(100):  # yavaş makinede / coverage altında çıkış birkaç saniye sürebilir
+        if not (_server_pids() & running):
+            break
+        await asyncio.sleep(0.1)
     assert not (_server_pids() & running)
 
 

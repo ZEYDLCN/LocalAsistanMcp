@@ -130,9 +130,9 @@ class CalendarService:
             raise InvalidInputError(f"{field}: year must be between {_MIN_YEAR} and {_MAX_YEAR}.")
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=self.tz)
-        # DST boşluğundaki (olmayan) yerel saatleri normalleştirir (02:30 -> 03:30 gibi)
-        normalized = parsed.astimezone(UTC).astimezone(parsed.tzinfo)
-        return Moment(normalized, date_only)
+        # DST boşluğundaki (olmayan) yerel saat (ör. 02:30) UTC'ye çevrilince ileri kayar (03:30); ayrıca
+        # normalleştirmeye gerek yok.
+        return Moment(parsed, date_only)
 
     def _local_date(self, moment: Moment, tz: ZoneInfo | None = None) -> date:
         return self._local(moment.value, tz).date()

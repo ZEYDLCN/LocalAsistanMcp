@@ -508,3 +508,28 @@ class TestManager:
         assert [s["title"] for s in manager.summaries()] == ["ikinci sohbet", "birinci sohbet"]
         s1.reset()
         assert s1.messages == [] and s1.transcript == [] and s1.title == ""
+
+
+class TestManagerShutdown:
+    async def test_aclose_denies_pending_approvals_so_shutdown_never_hangs(self, hub, settings, workspace):
+        (workspace / "x.txt").write_text("1")
+        provider = ScriptedProvider([Step(tools=[("fs_delete", {"path": "x.txt"})]), Step(text="bitti")])
+        manager = ChatManager(hub, provider, settings)
+        session = manager.create()
+        events = []
+
+        async def consume():
+            async for event in session.run_turn("sil"):
+                events.append(event)
+
+        task = asyncio.create_task(consume())
+        for _ in range(100):
+            if session.pending_approvals():
+                break
+            await asyncio.sleep(0.02)
+        assert session.pending_approvals()
+        await manager.aclose()  # kapanış: bekleyen onay "reddedildi" sayılır
+        await asyncio.wait_for(task, 5)
+        resolved = next(e for e in events if e.type == "approval_resolved")
+        assert resolved.data["approved"] is False and "Shutting down" in resolved.data["reason"]
+        assert (workspace / "x.txt").exists() and not session.busy

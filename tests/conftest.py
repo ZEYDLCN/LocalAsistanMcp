@@ -66,3 +66,27 @@ def web_settings(settings: Settings) -> Settings:
     from tests.support import free_port
 
     return settings.with_overrides(port=free_port())
+
+
+@pytest.fixture
+def live(web_settings: Settings):
+    """`live(provider, stdio=False, **overrides)` -> çalışan gerçek uvicorn sunucusu (varsayılan: süreç-içi MCP)."""
+    from localasistan.web.app import create_app
+    from tests.support import LiveServer
+
+    servers: list[LiveServer] = []
+
+    def start(provider, *, stdio: bool = False, **overrides) -> LiveServer:
+        cfg = web_settings.with_overrides(**overrides) if overrides else web_settings
+        target = (
+            StdioServerParameters(command=sys.executable, args=["-m", "localasistan.server"], env=cfg.server_env())
+            if stdio
+            else build_server(cfg)
+        )
+        server = LiveServer(create_app(cfg, hub_target=target, provider=provider), cfg.port).__enter__()
+        servers.append(server)
+        return server
+
+    yield start
+    for server in servers:
+        server.__exit__(None, None, None)

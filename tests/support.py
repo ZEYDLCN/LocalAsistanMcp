@@ -204,3 +204,68 @@ class SSEReader:
 async def read_sse(response) -> list[dict]:
     """Akışı sonuna kadar okuyup tüm olayları döndürür."""
     return await SSEReader(response).rest()
+
+
+def http_client(server: LiveServer):
+    import httpx2
+
+    return httpx2.AsyncClient(base_url=server.base_url, headers={"content-type": "application/json"}, timeout=60)
+
+
+async def chat(
+    client, message: str, *, session_id: str | None = None, approve: Callable[[dict], tuple[bool, str]] | None = None
+) -> tuple[str, list[dict]]:
+    """Bir sohbet turunu HTTP/SSE üzerinden sonuna kadar sürer; onay isteklerini `approve` ile yanıtlar.
+
+    Dönüş: (session_id, tüm olaylar).  `approve` yoksa her şey onaylanır.
+    """
+    body: dict[str, Any] = {"message": message}
+    if session_id:
+        body["session_id"] = session_id
+    async with client.stream("POST", "/api/chat", json=body) as response:
+        assert response.status_code == 200, await response.aread()
+        reader = SSEReader(response)
+        sid = session_id or ""
+        while True:
+            events = await reader.until(lambda e: e["type"] in ("approval_required", "turn_end"))
+            sid = sid or events[0]["session_id"]
+            last = events[-1]
+            if last["type"] != "approval_required":
+                return sid, reader.events
+            granted, reason = approve(last) if approve else (True, "")
+            reply = await client.post(
+                f"/api/chat/{sid}/approvals/{last['approval_id']}", json={"approve": granted, "reason": reason}
+            )
+            assert reply.status_code == 200
+
+
+class FunctionProvider:
+    """Her yanıtı `handler(messages) -> Step` ile üreten sağlayıcı (eşzamanlı oturumlar için yönlendirme yapabilir)."""
+
+    name = "function"
+    is_configured = True
+
+    def __init__(self, handler: Callable[[list[dict]], Step]) -> None:
+        self.handler = handler
+        self.calls = 0
+
+    async def stream_turn(self, *, system: str, tools: list[dict], messages: list[dict]):
+        self.calls += 1
+        step = self.handler(messages)
+        inner = ScriptedProvider([step])
+        async for item in inner.stream_turn(system=system, tools=tools, messages=messages):
+            yield item
+
+
+def last_tool_result(messages: list[dict]) -> Any:
+    """Son user mesajındaki ilk tool_result'ın içeriği (JSON ise ayrıştırılmış)."""
+    block = messages[-1]["content"][0]
+    assert block["type"] == "tool_result", block
+    try:
+        return _json.loads(block["content"])
+    except ValueError:
+        return block["content"]
+
+
+def result_blocks(messages: list[dict]) -> list[dict]:
+    return [b for b in messages[-1]["content"] if b["type"] == "tool_result"]

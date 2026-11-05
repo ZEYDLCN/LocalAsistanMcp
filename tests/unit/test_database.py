@@ -4,6 +4,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -445,3 +446,87 @@ def test_raw_sqlite_is_not_writable_through_query(people):
     assert people.path.read_bytes() == before
     with sqlite3.connect(people.path) as conn:
         assert conn.execute("SELECT COUNT(*) FROM people").fetchone()[0] == 3
+
+
+class TestDefenseLayers:
+    """Her katman, DİĞERLERİ OLMASA DA tek başına zararı engellemeli (derinlemesine savunma kanıtı)."""
+
+    HARMFUL: ClassVar[list[str]] = [
+        "INSERT INTO people (name) VALUES ('x')",
+        "UPDATE people SET name = 'y'",
+        "DELETE FROM people",
+        "DROP TABLE people",
+        "CREATE TABLE z (a)",
+        "ATTACH DATABASE ':memory:' AS e",
+        "PRAGMA user_version = 3",
+    ]
+
+    def test_layer_1_read_only_uri_blocks_writes_on_its_own(self, people):
+        conn = sqlite3.connect(f"{people.path.resolve().as_uri()}?mode=ro", uri=True)
+        for sql in self.HARMFUL[:4]:
+            with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                conn.execute(sql)
+        conn.close()
+
+    def test_layer_2_query_only_pragma_blocks_writes_on_its_own(self, people):
+        conn = sqlite3.connect(people.path)
+        conn.execute("PRAGMA query_only = ON")
+        for sql in self.HARMFUL[:4]:
+            with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                conn.execute(sql)
+        conn.close()
+
+    def test_layer_3_read_authorizer_blocks_everything_but_reads_on_a_writable_connection(self, people):
+        conn = sqlite3.connect(people.path)
+        conn.set_authorizer(DatabaseService._read_authorizer)
+        for sql in [*self.HARMFUL, "SELECT load_extension('x')"]:
+            with pytest.raises(sqlite3.DatabaseError):
+                conn.execute(sql)
+        assert conn.execute("SELECT COUNT(*) FROM people").fetchone()[0] == 3
+        assert conn.execute("WITH c AS (SELECT 1) SELECT * FROM c").fetchall() == [(1,)]
+        conn.close()
+
+    def test_layer_4_write_authorizer_blocks_attach_pragma_virtual_and_internal_tables(self, people):
+        conn = sqlite3.connect(people.path, isolation_level=None)
+        conn.set_authorizer(DatabaseService._make_write_authorizer(ddl=False))
+        for sql in [
+            "ATTACH DATABASE ':memory:' AS e",
+            "PRAGMA user_version = 3",
+            "BEGIN",
+            "SAVEPOINT s",
+            "INSERT INTO sqlite_master (type, name, tbl_name, sql) VALUES ('table', 'x', 'x', '')",
+            "SELECT load_extension('x')",
+        ]:
+            with pytest.raises(sqlite3.DatabaseError):
+                conn.execute(sql)
+        conn.execute("INSERT INTO people (name) VALUES ('izinli')")  # normal DML'e izin var
+        ddl = DatabaseService._make_write_authorizer(ddl=True)
+        assert ddl(sqlite3.SQLITE_INSERT, "sqlite_master", None, "main", None) == sqlite3.SQLITE_OK  # DDL iç yazımı
+        conn.close()
+
+
+class TestErrorTranslation:
+    @pytest.mark.parametrize(
+        ("exc", "expected", "fragment"),
+        [
+            (sqlite3.OperationalError("database or disk is full"), LimitError, "size limit"),
+            (sqlite3.DataError("string or blob too big"), LimitError, "too large"),
+            (sqlite3.OperationalError("interrupted"), LimitError, "time limit"),
+            (sqlite3.OperationalError("attempt to write a readonly database"), SqlGuardError, "read-only"),
+            (sqlite3.DatabaseError("not authorized"), SqlGuardError, "not allowed"),
+            (sqlite3.IntegrityError("UNIQUE constraint failed: t.a"), InvalidInputError, "Constraint failed"),
+            (sqlite3.ProgrammingError("You can only execute one statement at a time."), SqlGuardError, "one SQL"),
+            (sqlite3.OperationalError("near FROM: syntax error"), InvalidInputError, "SQL error"),
+            (sqlite3.DatabaseError("file is not a database"), InvalidInputError, "Database error"),
+        ],
+    )
+    def test_translation_table(self, db, exc, expected, fragment):
+        translated = db._translate(exc)
+        assert isinstance(translated, expected) and fragment in str(translated)
+
+    def test_corrupt_database_file_gives_a_domain_error(self, tmp_path):
+        broken = tmp_path / "broken.db"
+        broken.write_bytes(b"this is definitely not sqlite" * 50)
+        with pytest.raises(Exception) as info:
+            DatabaseService(broken)
+        assert "database" in str(info.value).lower()

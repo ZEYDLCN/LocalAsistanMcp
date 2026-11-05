@@ -36,7 +36,10 @@ Finder'dan başlatmak için `scripts/LocalAsistan.command` dosyasına çift tık
 
 ```bash
 .venv/bin/localasistan seed
+open ~/.localasistan/workspace     # asistanın dosya alanını Finder'da görün
 ```
+
+Dosya alanını Finder'da kolay erişilen bir yere taşımak isterseniz `.env` içine `LOCALASISTAN_WORKSPACE=~/Documents/LocalAsistan` yazın.
 
 Kurulumu doğrulamak için (ikincisi **gerçek bir API çağrısı** yapar, birkaç bin token tutar):
 

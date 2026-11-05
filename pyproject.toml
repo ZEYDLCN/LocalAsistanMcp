@@ -25,6 +25,7 @@ dev = [
     "pytest-cov>=5",
     "ruff>=0.6",
     "playwright>=1.45",
+    "hypothesis>=6.100",
 ]
 
 [project.scripts]
@@ -50,9 +51,9 @@ filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
 [tool.coverage.run]
 source = ["localasistan"]
 branch = true
-concurrency = ["thread", "multiprocessing"]
 parallel = true
 sigterm = true
+patch = ["subprocess"]
 
 [tool.coverage.report]
 show_missing = true
@@ -70,3 +71,4 @@ ignore = ["RUF001", "RUF002", "RUF003", "B008"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B011", "SIM117"]
+"scripts/qa_mutations.py" = ["E501"]

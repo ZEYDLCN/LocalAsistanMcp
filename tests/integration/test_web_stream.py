@@ -4,34 +4,13 @@ from __future__ import annotations
 
 import asyncio
 
-import httpx2
-import pytest
-
-from localasistan.server.app import build_server
-from localasistan.web.app import create_app
-from tests.support import LiveServer, ScriptedProvider, SSEReader, Step, read_sse
+from tests.support import LiveServer, ScriptedProvider, SSEReader, Step, http_client, read_sse
 
 JSON = {"content-type": "application/json"}
 
 
-@pytest.fixture
-def live(web_settings):
-    servers: list[LiveServer] = []
-
-    def start(provider: ScriptedProvider, **overrides) -> LiveServer:
-        cfg = web_settings.with_overrides(**overrides) if overrides else web_settings
-        app = create_app(cfg, hub_target=build_server(cfg), provider=provider)
-        server = LiveServer(app, cfg.port).__enter__()
-        servers.append(server)
-        return server
-
-    yield start
-    for server in servers:
-        server.__exit__(None, None, None)
-
-
-def http(server: LiveServer) -> httpx2.AsyncClient:
-    return httpx2.AsyncClient(base_url=server.base_url, headers=JSON, timeout=30)
+def http(server: LiveServer):
+    return http_client(server)
 
 
 async def wait_until(predicate, timeout=5.0, interval=0.05):

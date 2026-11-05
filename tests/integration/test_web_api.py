@@ -363,6 +363,10 @@ class TestMcpAvailability:
         assert c.get("/api/tools").status_code == 503
         assert c.post("/api/reconnect", json={}).status_code == 503
         assert c.post("/api/tools/fs_list/call", json={"arguments": {}}).status_code == 503
+        assert c.get("/api/resources").status_code == 503
+        assert c.get("/api/resources/read", params={"uri": "calendar://today"}).status_code == 503
+        assert c.get("/api/prompts").status_code == 503
+        assert c.post("/api/prompts/daily_briefing", json={"arguments": {}}).status_code == 503
 
     @pytest.mark.stdio
     def test_real_stdio_server_behind_the_app(self, client_factory, web_settings):

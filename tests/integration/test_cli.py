@@ -8,12 +8,14 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from localasistan import cli
 from localasistan.client.agent import ChatManager
 from localasistan.client.hub import McpHub
+from localasistan.config import Settings
 from localasistan.doctor import FAIL, OK, WARN, run_checks
 from localasistan.errors import LocalAsistanError
 from tests.anthropic_fake import FakeAnthropic, api_error, message_stream
@@ -333,3 +335,110 @@ class TestRealUiProcess:
         finally:
             proc.send_signal(signal.SIGTERM)
         assert proc.wait(timeout=20) == 0
+
+
+class TestRemainingCliPaths:
+    def test_python_dash_m_entrypoint(self, tmp_path):
+        proc = subprocess.run(
+            [sys.executable, "-m", "localasistan", "--version"],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+            check=False,
+        )
+        assert proc.returncode == 0 and "localasistan 0.1.0" in proc.stdout
+
+    @pytest.mark.stdio
+    def test_server_command_speaks_mcp_on_stdio_and_exits_cleanly_on_eof(self, tmp_path):
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("LOCALASISTAN_", "ANTHROPIC_"))}
+        env.update({"LOCALASISTAN_HOME": str(tmp_path / "h"), "HOME": str(tmp_path)})
+        proc = subprocess.run(
+            [sys.executable, "-m", "localasistan", "server"],
+            input=b"",
+            capture_output=True,
+            env=env,
+            cwd=tmp_path,
+            check=False,
+        )
+        assert proc.returncode == 0 and proc.stdout == b""
+
+    def test_keyboard_interrupt_exits_130(self, env, monkeypatch, capsys):
+        def interrupted(args, settings):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(cli, "cmd_config", interrupted)
+        parser_patch = cli.build_parser()
+        monkeypatch.setattr(cli, "build_parser", lambda: parser_patch)
+        for action in parser_patch._subparsers._group_actions:
+            action.choices["config"].set_defaults(func=interrupted)
+        assert cli.main(["config"]) == 130
+
+    def test_chat_command_with_an_injected_provider_and_terminal_input(self, env, monkeypatch, capsys):
+        lines = iter(["merhaba", "/cikis"])
+        monkeypatch.setattr("builtins.input", lambda prompt="": next(lines))
+        provider = ScriptedProvider([Step(text="Selam, ben asistan!")])
+        args = cli.build_parser().parse_args(["chat"])
+        assert cli.cmd_chat(args, Settings_from(env), provider) == 0
+        assert "Selam, ben asistan!" in capsys.readouterr().out
+
+    def test_chat_command_requires_an_api_key(self, env, capsys):
+        args = cli.build_parser().parse_args(["chat"])
+        assert cli.cmd_chat(args, Settings_from(env)) == 2
+        assert "ANTHROPIC_API_KEY" in capsys.readouterr().err
+
+    def test_chat_command_reports_an_unavailable_server(self, env, monkeypatch, capsys):
+        from localasistan.client.hub import HubError
+
+        async def fail(self):
+            raise HubError("sunucu yok")
+
+        monkeypatch.setattr(McpHub, "start", fail)
+        args = cli.build_parser().parse_args(["chat"])
+        assert cli.cmd_chat(args, Settings_from(env), ScriptedProvider([])) == 1
+        assert "sunucu yok" in capsys.readouterr().err
+
+    def test_tools_command_reports_an_unavailable_server(self, env, monkeypatch, capsys):
+        from localasistan.client.hub import HubError
+
+        async def fail(self, *, refresh=False):
+            raise HubError("bağlanılamadı")
+
+        monkeypatch.setattr(McpHub, "list_tools", fail)
+        assert cli.main(["tools"]) == 1
+        assert "bağlanılamadı" in capsys.readouterr().err
+
+    async def test_doctor_reports_unwritable_directories_and_a_dead_server(self, settings, monkeypatch, tmp_path):
+        blocker = tmp_path / "blocker"
+        blocker.write_text("bir dosya")
+        broken = settings.with_overrides(home=blocker / "home", workspace=blocker / "ws")
+        checks = await run_checks(broken)
+        assert [c.status for c in checks if c.name.startswith("yazılabilir")] == [FAIL, FAIL]
+        assert next(c for c in checks if c.name == "MCP sunucusu").status == FAIL
+
+    async def test_doctor_live_check_edge_cases(self, settings):
+        from localasistan.doctor import _live_llm_check
+
+        assert (await _live_llm_check(settings.with_overrides(api_key="sk"), [])).status == FAIL  # araç yok
+
+        class Silent:
+            name, is_configured = "silent", True
+
+            async def stream_turn(self, **_kw):
+                return
+                yield
+
+        spec = SimpleNamespace(name="t", title="t", description="d", input_schema={"type": "object"})
+        result = await _live_llm_check(settings, [spec], Silent())
+        assert result.status == FAIL and "yanıt alınamadı" in result.detail
+
+        class Exploding(Silent):
+            async def stream_turn(self, **_kw):
+                raise RuntimeError("boom")
+                yield
+
+        assert "RuntimeError" in (await _live_llm_check(settings, [spec], Exploding())).detail
+
+
+def Settings_from(_env_dir) -> Settings:
+    """`env` fixture'ının ortam değişkenlerinden ayarları üretir."""
+    return Settings.from_env()
