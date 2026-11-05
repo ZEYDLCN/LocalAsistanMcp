@@ -15,6 +15,7 @@ dependencies = [
     "starlette",
     "uvicorn",
     "jsonschema>=4",
+    "tzdata",
 ]
 
 [project.optional-dependencies]
