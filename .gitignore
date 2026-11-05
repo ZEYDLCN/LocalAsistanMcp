@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Yerel yapılandırma / veri
+.env
+.localasistan/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# macOS / editör
+.DS_Store
+.idea/
+.vscode/
+
+# Playwright çıktıları
+test-results/
+playwright-report/
