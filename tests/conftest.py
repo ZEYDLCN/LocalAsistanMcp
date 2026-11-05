@@ -59,3 +59,10 @@ async def call(client: Client, name: str, arguments: dict | None = None):
 
 def text_of(result) -> str:
     return "".join(c.text for c in result.content if getattr(c, "type", "") == "text")
+
+
+@pytest.fixture
+def web_settings(settings: Settings) -> Settings:
+    from tests.support import free_port
+
+    return settings.with_overrides(port=free_port())

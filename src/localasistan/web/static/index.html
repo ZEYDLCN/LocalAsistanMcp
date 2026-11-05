@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LocalAsistan</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">◈</span> LocalAsistan <small id="version"></small></div>
+    <nav class="tabs" role="tablist" aria-label="Bölümler">
+      <button role="tab" data-tab="chat" id="tabbtn-chat" aria-selected="true" aria-controls="tab-chat">Sohbet</button>
+      <button role="tab" data-tab="tools" id="tabbtn-tools" aria-selected="false" aria-controls="tab-tools">Araçlar</button>
+      <button role="tab" data-tab="resources" id="tabbtn-resources" aria-selected="false" aria-controls="tab-resources">Kaynaklar &amp; Promptlar</button>
+      <button role="tab" data-tab="status" id="tabbtn-status" aria-selected="false" aria-controls="tab-status">Durum</button>
+    </nav>
+    <div class="statusbar">
+      <span id="mcp-dot" class="dot dot-off" role="img" aria-label="MCP bağlantısı"></span>
+      <span id="mcp-label" class="muted">MCP</span>
+      <span id="model-chip" class="chip" title="Model"></span>
+      <label class="policy" title="Hangi araçların çalışmadan önce onay isteyeceği">Onay
+        <select id="policy-select" aria-label="Onay politikası">
+          <option value="ask_destructive">Yalnızca yıkıcı işlemler</option>
+          <option value="ask_writes">Her yazma işlemi</option>
+          <option value="auto">Hiçbir zaman (dikkat)</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <section id="tab-chat" class="tab active" role="tabpanel" aria-labelledby="tabbtn-chat">
+      <div id="banner" class="banner hidden" role="alert"></div>
+      <div id="messages" class="messages" aria-live="polite">
+        <div id="empty" class="empty">
+          <h2>Merhaba 👋</h2>
+          <p>Yerel dosyalarınızı, takviminizi ve veritabanınızı sizin için kullanabilirim.</p>
+          <div id="examples" class="examples"></div>
+        </div>
+      </div>
+      <form id="composer" class="composer" autocomplete="off">
+        <textarea id="input" rows="2" maxlength="20000" aria-label="Mesaj"
+          placeholder="Bir şey sorun ya da isteyin…  (Enter: gönder · Shift+Enter: yeni satır)"></textarea>
+        <div class="composer-actions">
+          <button type="button" id="new-chat" class="ghost">Yeni sohbet</button>
+          <span id="typing" class="muted hidden" aria-live="polite"></span>
+          <span class="spacer"></span>
+          <button type="button" id="stop" class="danger hidden">Durdur</button>
+          <button type="submit" id="send" class="primary">Gönder</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="tab-tools" class="tab" role="tabpanel" aria-labelledby="tabbtn-tools" hidden>
+      <p class="hint">MCP sunucusunun sunduğu araçları LLM olmadan, doğrudan deneyin. Buradaki "Çalıştır" düğmesi sizin açık onayınızdır.</p>
+      <div class="split">
+        <aside class="list-pane">
+          <input id="tool-filter" type="search" placeholder="Araç ara…" aria-label="Araç ara">
+          <ul id="tool-list" class="item-list"></ul>
+        </aside>
+        <div id="tool-detail" class="detail-pane"><p class="muted">Soldan bir araç seçin.</p></div>
+      </div>
+    </section>
+
+    <section id="tab-resources" class="tab" role="tabpanel" aria-labelledby="tabbtn-resources" hidden>
+      <div class="cols">
+        <div>
+          <h3>Kaynaklar</h3>
+          <ul id="resource-list" class="item-list"></ul>
+          <h3>Şablonlar</h3>
+          <div id="template-list"></div>
+          <pre id="resource-view" class="viewer" aria-live="polite">Bir kaynak seçin.</pre>
+        </div>
+        <div>
+          <h3>Promptlar</h3>
+          <div id="prompt-list"></div>
+          <pre id="prompt-view" class="viewer" aria-live="polite">Bir prompt seçin.</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-status" class="tab" role="tabpanel" aria-labelledby="tabbtn-status" hidden>
+      <div class="status-actions">
+        <button id="reconnect" class="ghost">MCP sunucusunu yeniden başlat</button>
+        <button id="refresh-status" class="ghost">Yenile</button>
+      </div>
+      <div id="status-body"></div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

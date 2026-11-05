@@ -120,3 +120,87 @@ def types_of(events: list[Event]) -> list[str]:
             continue
         kinds.append(event.type)
     return kinds
+
+
+# ------------------------------------------------------------------ gerçek HTTP sunucusu
+import json as _json  # noqa: E402
+import socket  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+
+import uvicorn  # noqa: E402
+
+
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+class LiveServer:
+    """Gerçek uvicorn sunucusunu bir iş parçacığında çalıştırır (akış/kopma testleri için)."""
+
+    def __init__(self, app, port: int) -> None:
+        self.port = port
+        self.base_url = f"http://127.0.0.1:{port}"
+        config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+        self.server = uvicorn.Server(config)
+        self.thread = threading.Thread(target=self.server.run, daemon=True)
+
+    def __enter__(self) -> LiveServer:
+        self.thread.start()
+        deadline = time.monotonic() + 30
+        while not self.server.started:
+            if time.monotonic() > deadline or not self.thread.is_alive():
+                raise RuntimeError("live server did not start")
+            time.sleep(0.05)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.server.should_exit = True
+        self.thread.join(timeout=20)
+
+
+class SSEReader:
+    """Tek bir yineleyiciyle SSE akışını parça parça okur (erken dönünce akışı KAPATMAZ)."""
+
+    def __init__(self, response) -> None:
+        self._chunks = response.aiter_text().__aiter__()
+        self._buffer = ""
+        self.events: list[dict] = []
+        self.finished = False
+
+    async def _next_event(self) -> dict | None:
+        while True:
+            if "\n\n" in self._buffer:
+                frame, self._buffer = self._buffer.split("\n\n", 1)
+                data = "\n".join(line[5:].lstrip() for line in frame.split("\n") if line.startswith("data:"))
+                if data:
+                    event = _json.loads(data)
+                    self.events.append(event)
+                    return event
+                continue
+            try:
+                self._buffer += await self._chunks.__anext__()
+            except StopAsyncIteration:
+                self.finished = True
+                return None
+
+    async def until(self, predicate) -> list[dict]:
+        """Koşulu sağlayan olaya kadar (dahil) okur; o ana dek alınan TÜM olayları döndürür."""
+        while True:
+            event = await self._next_event()
+            if event is None or predicate(event):
+                return list(self.events)
+
+    async def rest(self) -> list[dict]:
+        """Akışın sonuna kadar okur; yalnızca BU çağrıdan itibaren gelen olayları döndürür."""
+        start = len(self.events)
+        while await self._next_event() is not None:
+            pass
+        return self.events[start:]
+
+
+async def read_sse(response) -> list[dict]:
+    """Akışı sonuna kadar okuyup tüm olayları döndürür."""
+    return await SSEReader(response).rest()
