@@ -121,3 +121,13 @@ async def test_server_process_is_gone_after_client_exit(settings, stdio_params):
 def _server_pids() -> set[int]:
     out = subprocess.run(["pgrep", "-f", "localasistan.server"], capture_output=True, text=True, check=False).stdout
     return {int(p) for p in out.split()} - {os.getpid()}
+
+
+async def test_older_clients_using_the_legacy_handshake_work_too(stdio_params):
+    """Claude Desktop gibi mevcut istemciler eski (initialize) el sıkışmasını kullanır."""
+    async with Client(stdio_params, mode="legacy") as c:
+        assert c.protocol_version != "2026-07-28"
+        assert len((await c.list_tools()).tools) == 25
+        assert data(await call(c, "calendar_now"))["timezone"] == "Europe/Istanbul"
+        assert {str(r.uri) for r in (await c.list_resources()).resources} >= {"calendar://today"}
+        assert (await c.get_prompt("daily_briefing", {})).messages

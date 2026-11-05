@@ -7,8 +7,8 @@ PY   := $(VENV)/bin/python
 help:            ## Komutları listele
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
-setup:           ## Sanal ortam + bağımlılıklar (Mac/Linux)
-	./scripts/setup.sh
+setup:           ## Sanal ortam + bağımlılıklar + test araçları (Mac/Linux)
+	./scripts/setup.sh --dev
 
 ui:              ## Web arayüzünü başlat
 	$(PY) -m localasistan.cli ui
