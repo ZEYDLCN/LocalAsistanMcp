@@ -108,9 +108,7 @@ class DatabaseService:
 
     @contextlib.contextmanager
     def _read_connection(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(
-            f"{self.path.resolve().as_uri()}?mode=ro", uri=True, timeout=self.timeout_seconds
-        )
+        conn = sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True, timeout=self.timeout_seconds)
         try:
             conn.isolation_level = None
             self._apply_limits(conn)
@@ -148,9 +146,7 @@ class DatabaseService:
     def _make_write_authorizer(*, ddl: bool):
         """DDL (CREATE/DROP/ALTER) motorun kendi `sqlite_master` yazımlarına izin verir; DML vermez."""
 
-        def authorize(
-            action: int, arg1: str | None, arg2: str | None, dbname: str | None, source: str | None
-        ) -> int:
+        def authorize(action: int, arg1: str | None, arg2: str | None, dbname: str | None, source: str | None) -> int:
             if action in _DENIED_WRITE_ACTIONS:
                 return _DENY
             if action == sqlite3.SQLITE_FUNCTION and (arg2 or "").lower() == "load_extension":
@@ -167,13 +163,10 @@ class DatabaseService:
         lowered = message.lower()
         if "not authorized" in lowered or "authoriz" in lowered:
             return SqlGuardError(
-                "This statement is not allowed "
-                "(ATTACH, PRAGMA, transactions and internal tables are blocked)."
+                "This statement is not allowed (ATTACH, PRAGMA, transactions and internal tables are blocked)."
             )
         if "interrupted" in lowered:
-            return LimitError(
-                f"The statement exceeded the {self.timeout_seconds:g}s time limit and was stopped."
-            )
+            return LimitError(f"The statement exceeded the {self.timeout_seconds:g}s time limit and was stopped.")
         if "database or disk is full" in lowered or "database is full" in lowered:
             return LimitError("The database size limit has been reached.")
         if "string or blob too big" in lowered or "too big" in lowered:
@@ -273,8 +266,7 @@ class DatabaseService:
                     for f in conn.execute(f"PRAGMA foreign_key_list({ident})").fetchall()
                 ]
                 indexes = [
-                    {"name": i[1], "unique": bool(i[2])}
-                    for i in conn.execute(f"PRAGMA index_list({ident})").fetchall()
+                    {"name": i[1], "unique": bool(i[2])} for i in conn.execute(f"PRAGMA index_list({ident})").fetchall()
                 ]
                 try:
                     count = conn.execute(f"SELECT COUNT(*) FROM {ident}").fetchone()[0]
@@ -297,8 +289,7 @@ class DatabaseService:
         try:
             with self._internal_connection() as conn:
                 rows = conn.execute(
-                    f"SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND {_NOT_INTERNAL} "
-                    "ORDER BY type DESC, name"
+                    f"SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND {_NOT_INTERNAL} ORDER BY type DESC, name"
                 ).fetchall()
         except sqlite3.Error as exc:
             raise self._translate(exc) from exc
@@ -313,9 +304,7 @@ class DatabaseService:
         keyword = first_keyword(sql)
         if keyword not in _QUERY_KEYWORDS:
             hint = " Use db_execute for changes." if keyword in _EXECUTE_KEYWORDS else ""
-            raise SqlGuardError(
-                f"db_query only accepts SELECT statements (got '{keyword or sql[:20]}').{hint}"
-            )
+            raise SqlGuardError(f"db_query only accepts SELECT statements (got '{keyword or sql[:20]}').{hint}")
         values = _validate_params(params)
         try:
             with self._read_connection() as conn:
@@ -377,9 +366,7 @@ class DatabaseService:
                 raise InvalidInputError(f"rows[{index}] must be an object of column: value pairs.")
             for column, value in row.items():
                 if not isinstance(value, _SCALAR):
-                    raise InvalidInputError(
-                        f"rows[{index}].{column} must be a string, number, boolean or null."
-                    )
+                    raise InvalidInputError(f"rows[{index}].{column} must be a string, number, boolean or null.")
         conn = self._open_write_connection()
         try:
             exists = conn.execute(
@@ -406,9 +393,7 @@ class DatabaseService:
                     if row:
                         cols = ", ".join(quote_identifier(c) for c in row)
                         marks = ", ".join("?" for _ in row)
-                        cursor = conn.execute(
-                            f"INSERT INTO {ident} ({cols}) VALUES ({marks})", list(row.values())
-                        )
+                        cursor = conn.execute(f"INSERT INTO {ident} ({cols}) VALUES ({marks})", list(row.values()))
                     else:
                         cursor = conn.execute(f"INSERT INTO {ident} DEFAULT VALUES")
                     last_id = cursor.lastrowid

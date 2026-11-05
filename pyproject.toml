@@ -60,7 +60,7 @@ skip_covered = false
 exclude_also = ["if __name__ == .__main__.:", "raise NotImplementedError", "\\.\\.\\."]
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py311"
 src = ["src", "tests"]
 

@@ -73,9 +73,7 @@ def _load(text: str) -> datetime:
 
 
 class CalendarService:
-    def __init__(
-        self, path: Path, *, timezone: str = "UTC", now: Callable[[], datetime] | None = None
-    ) -> None:
+    def __init__(self, path: Path, *, timezone: str = "UTC", now: Callable[[], datetime] | None = None) -> None:
         self.path = Path(path)
         self.tz = ZoneInfo(timezone)
         self.tz_name = timezone
@@ -119,17 +117,14 @@ class CalendarService:
     # ------------------------------------------------------------ giriş ayrıştırma
     def parse_moment(self, value: str, field: str) -> Moment:
         if not isinstance(value, str) or not value.strip():
-            raise InvalidInputError(
-                f"{field} is required (ISO 8601, e.g. '2026-11-06T14:30' or '2026-11-06')."
-            )
+            raise InvalidInputError(f"{field} is required (ISO 8601, e.g. '2026-11-06T14:30' or '2026-11-06').")
         text = value.strip()
         try:
             date_only = len(text) == 10 and text[4] == "-" and text[7] == "-"
             parsed = datetime.fromisoformat(text)
         except ValueError:
             raise InvalidInputError(
-                f"{field}: could not understand '{text[:60]}'. "
-                "Use ISO 8601, e.g. '2026-11-06T14:30' or '2026-11-06'."
+                f"{field}: could not understand '{text[:60]}'. Use ISO 8601, e.g. '2026-11-06T14:30' or '2026-11-06'."
             ) from None
         if not _MIN_YEAR <= parsed.year <= _MAX_YEAR:
             raise InvalidInputError(f"{field}: year must be between {_MIN_YEAR} and {_MAX_YEAR}.")
@@ -216,8 +211,7 @@ class CalendarService:
         self, conn: sqlite3.Connection, start: datetime, end: datetime, *, exclude_id: int | None = None
     ) -> list[dict]:
         rows = conn.execute(
-            "SELECT * FROM events WHERE all_day = 0 AND start_utc < ? AND end_utc > ? AND id != ? "
-            "ORDER BY start_utc",
+            "SELECT * FROM events WHERE all_day = 0 AND start_utc < ? AND end_utc > ? AND id != ? ORDER BY start_utc",
             (_store(end), _store(start), exclude_id or -1),
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
@@ -304,9 +298,7 @@ class CalendarService:
         allow_conflicts: bool = False,
     ) -> dict:
         if all(v is None for v in (title, start, end, description, location)):
-            raise InvalidInputError(
-                "Nothing to update: give at least one of title, start, end, description, location."
-            )
+            raise InvalidInputError("Nothing to update: give at least one of title, start, end, description, location.")
         with self._write() as conn:
             row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
             if row is None:
@@ -314,13 +306,9 @@ class CalendarService:
             all_day = bool(row["all_day"])
             event_tz = ZoneInfo(row["tz"])
             old_start, old_end = _load(row["start_utc"]), _load(row["end_utc"])
-            new_title = (
-                self._clean_text(title, "title", 200, required=True) if title is not None else row["title"]
-            )
+            new_title = self._clean_text(title, "title", 200, required=True) if title is not None else row["title"]
             new_desc = (
-                self._clean_text(description, "description", 5000)
-                if description is not None
-                else row["description"]
+                self._clean_text(description, "description", 5000) if description is not None else row["description"]
             )
             new_loc = self._clean_text(location, "location", 200) if location is not None else row["location"]
 
@@ -362,8 +350,7 @@ class CalendarService:
                     if conflicts:
                         raise self._conflict_error(conflicts)
             conn.execute(
-                "UPDATE events SET title=?, description=?, location=?, start_utc=?, end_utc=?, "
-                "updated_at=? WHERE id=?",
+                "UPDATE events SET title=?, description=?, location=?, start_utc=?, end_utc=?, updated_at=? WHERE id=?",
                 (
                     new_title,
                     new_desc,
@@ -406,9 +393,7 @@ class CalendarService:
             raise LimitError(f"The range can span at most {_MAX_RANGE_DAYS} days.")
         return lo, hi
 
-    def list_events(
-        self, start: str, end: str | None = None, *, query: str | None = None, limit: int = 100
-    ) -> dict:
+    def list_events(self, start: str, end: str | None = None, *, query: str | None = None, limit: int = 100) -> dict:
         if not 1 <= limit <= 500:
             raise InvalidInputError("limit must be between 1 and 500.")
         lo, hi = self._range(start, end)
@@ -548,9 +533,7 @@ class CalendarService:
             else:
                 start_value, end_value = s, e
             events.append(
-                ics.IcsEvent(
-                    row["uid"], row["title"], start_value, end_value, row["description"], row["location"]
-                )
+                ics.IcsEvent(row["uid"], row["title"], start_value, end_value, row["description"], row["location"])
             )
         return ics.serialize_calendar(events, self.now()), len(events)
 
@@ -613,9 +596,7 @@ class CalendarService:
         lines = [f"Agenda {label} ({self.tz_name}):"]
         for event in result["events"]:
             if event["all_day"]:
-                span = (
-                    event["start"] if event["start"] == event["end"] else f"{event['start']}..{event['end']}"
-                )
+                span = event["start"] if event["start"] == event["end"] else f"{event['start']}..{event['end']}"
                 when = f"{span} (all day)"
             else:
                 when = f"{event['start'][:16].replace('T', ' ')} - {event['end'][11:16]}"

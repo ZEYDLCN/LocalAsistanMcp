@@ -83,9 +83,7 @@ class FileService:
 
     def _check_size(self, nbytes: int, shown: str) -> None:
         if nbytes > self.max_file_bytes:
-            raise LimitError(
-                f"Content for '{shown}' is {nbytes} bytes; the limit is {self.max_file_bytes} bytes."
-            )
+            raise LimitError(f"Content for '{shown}' is {nbytes} bytes; the limit is {self.max_file_bytes} bytes.")
 
     def _entry(self, resolved: Path, *, with_path: bool = True) -> dict:
         st = resolved.lstat()
@@ -134,11 +132,8 @@ class FileService:
         return {"path": shown, "entries": entries, "count": len(entries), "truncated": truncated}
 
     # ------------------------------------------------------------------------ read
-    def read_text(self, path: str, *, offset: int = 0, max_chars: int = 20_000) -> dict:
-        if offset < 0:
-            raise InvalidInputError("offset must be >= 0.")
-        if not 1 <= max_chars <= 100_000:
-            raise InvalidInputError("max_chars must be between 1 and 100000.")
+    def _load_text(self, path: str) -> tuple[str, int, str]:
+        """(metin, bayt boyutu, gösterilen yol) — ikili/UTF-8 dışı/büyük dosyaları reddeder."""
         resolved, shown = self._existing(path)
         with self._io(shown):
             if resolved.is_dir():
@@ -153,9 +148,20 @@ class FileService:
         if self._looks_binary(data[:_BINARY_PROBE]):
             raise InvalidInputError(f"'{shown}' looks like a binary file; only text files can be read.")
         try:
-            text = data.decode("utf-8-sig")
+            return data.decode("utf-8-sig"), size, shown
         except UnicodeDecodeError:
             raise InvalidInputError(f"'{shown}' is not valid UTF-8 text.") from None
+
+    def read_all(self, path: str) -> str:
+        """Dosyanın tüm metni (boyut sınırı içinde) — sunucu içi kullanım (ör. ICS içe aktarma)."""
+        return self._load_text(path)[0]
+
+    def read_text(self, path: str, *, offset: int = 0, max_chars: int = 20_000) -> dict:
+        if offset < 0:
+            raise InvalidInputError("offset must be >= 0.")
+        if not 1 <= max_chars <= 100_000:
+            raise InvalidInputError("max_chars must be between 1 and 100000.")
+        text, size, shown = self._load_text(path)
         total = len(text)
         if offset > total:
             raise InvalidInputError(f"offset {offset} is beyond the end of the file ({total} characters).")
@@ -326,17 +332,13 @@ class FileService:
             return {"deleted": shown, "type": "dir", "items_removed": removed}
 
     # ----------------------------------------------------------------------- search
-    def search(
-        self, pattern: str, path: str = ".", *, include_hidden: bool = False, max_results: int = 100
-    ) -> dict:
+    def search(self, pattern: str, path: str = ".", *, include_hidden: bool = False, max_results: int = 100) -> dict:
         if not pattern or not pattern.strip():
             raise InvalidInputError("pattern must not be empty.")
         if not 1 <= max_results <= 1000:
             raise InvalidInputError("max_results must be between 1 and 1000.")
         if os.path.isabs(pattern) or ".." in Path(pattern).parts or "\x00" in pattern:
-            raise InvalidInputError(
-                "pattern must be a relative glob without '..' (e.g. '*.md' or '**/*.py')."
-            )
+            raise InvalidInputError("pattern must be a relative glob without '..' (e.g. '*.md' or '**/*.py').")
         base, shown = self._existing(path)
         if not base.is_dir():
             raise InvalidInputError(f"'{shown}' is not a directory.")

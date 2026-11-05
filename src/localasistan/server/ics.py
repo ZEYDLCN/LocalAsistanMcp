@@ -199,9 +199,7 @@ def _zone(name: str | None, default: ZoneInfo, warnings: list[str]) -> ZoneInfo:
         return default
 
 
-def _parse_when(
-    value: str, params: dict[str, str], default: ZoneInfo, warnings: list[str]
-) -> datetime | date:
+def _parse_when(value: str, params: dict[str, str], default: ZoneInfo, warnings: list[str]) -> datetime | date:
     value = value.strip()
     if params.get("VALUE", "").upper() == "DATE" or re.fullmatch(r"\d{8}", value):
         return datetime.strptime(value[:8], "%Y%m%d").date()
@@ -237,9 +235,7 @@ def parse_calendar(text: str, default_tz: ZoneInfo, *, max_events: int = 5000) -
     return result
 
 
-def _finish_event(
-    props: list[tuple[str, dict[str, str], str]], result: ParseResult, default_tz: ZoneInfo
-) -> None:
+def _finish_event(props: list[tuple[str, dict[str, str], str]], result: ParseResult, default_tz: ZoneInfo) -> None:
     by_name: dict[str, tuple[dict[str, str], str]] = {}
     for name, params, value in props:
         by_name.setdefault(name, (params, value))

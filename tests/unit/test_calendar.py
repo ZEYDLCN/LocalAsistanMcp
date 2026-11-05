@@ -61,9 +61,7 @@ class TestCreate:
 
     def test_input_zones_are_converted(self, cal):
         utc = cal.create_event("A", "2026-11-06T11:00:00Z", "2026-11-06T11:30:00Z")
-        off = cal.create_event(
-            "B", "2026-11-06T13:00:00+02:00", "2026-11-06T13:30:00+02:00", allow_conflicts=True
-        )
+        off = cal.create_event("B", "2026-11-06T13:00:00+02:00", "2026-11-06T13:30:00+02:00", allow_conflicts=True)
         assert utc["start"] == off["start"] == "2026-11-06T14:00:00+03:00"
         assert utc["duration_minutes"] == 30
 
@@ -71,9 +69,7 @@ class TestCreate:
         assert cal.create_event("A", "2026-11-06 09:30:15")["start"] == "2026-11-06T09:30:15+03:00"
 
     def test_text_fields_stripped_and_unicode(self, cal):
-        e = cal.create_event(
-            "  Şükrü'yle çay  ", "2026-11-06T09:00", description=" not ", location=" Kadıköy "
-        )
+        e = cal.create_event("  Şükrü'yle çay  ", "2026-11-06T09:00", description=" not ", location=" Kadıköy ")
         assert (e["title"], e["description"], e["location"]) == ("Şükrü'yle çay", "not", "Kadıköy")
 
     @pytest.mark.parametrize(
@@ -209,9 +205,7 @@ class TestConflicts:
 class TestGetUpdateDelete:
     @pytest.fixture(autouse=True)
     def _base(self, cal):
-        cal.create_event(
-            "Standup", "2026-11-06T10:00", "2026-11-06T10:30", description="günlük", location="Ofis"
-        )
+        cal.create_event("Standup", "2026-11-06T10:00", "2026-11-06T10:30", description="günlük", location="Ofis")
         cal.create_event("Öğle", "2026-11-06T12:00", "2026-11-06T13:00")
         cal.create_event("Tatil", "2026-11-09", "2026-11-10", all_day=True)
 
@@ -224,9 +218,7 @@ class TestGetUpdateDelete:
         before = cal.get_event(1)
         after = cal.update_event(1, title="Yeni başlık")
         assert after["title"] == "Yeni başlık"
-        assert {k: v for k, v in after.items() if k != "title"} == {
-            k: v for k, v in before.items() if k != "title"
-        }
+        assert {k: v for k, v in after.items() if k != "title"} == {k: v for k, v in before.items() if k != "title"}
 
     def test_moving_start_preserves_duration(self, cal):
         e = cal.update_event(1, start="2026-11-06T14:00")
@@ -336,9 +328,7 @@ class TestList:
         assert titles(cal.list_events("2026-11-06", "2026-11-09", query="GECE")) == ["Gece nöbeti"]
         assert titles(cal.list_events("2026-11-06", "2026-11-09", query="kahve")) == ["Sabah"]
         assert titles(cal.list_events("2026-11-06", "2026-11-09", query="BEŞİKTAŞ")) == ["Sabah"]
-        assert (
-            titles(cal.list_events("2026-11-06", "2026-11-09", query="  ")) != []
-        )  # boş sorgu filtre değildir
+        assert titles(cal.list_events("2026-11-06", "2026-11-09", query="  ")) != []  # boş sorgu filtre değildir
         assert titles(cal.list_events("2026-11-06", "2026-11-09", query="yok böyle")) == []
 
     def test_limit_and_truncation(self, cal):
@@ -469,8 +459,7 @@ class TestFreeSlots:
     def test_all_day_events_block_only_when_requested(self, cal):
         cal.create_event("İzin", "2026-11-09", all_day=True)
         assert any(
-            s["start"].startswith("2026-11-09")
-            for s in cal.find_free_slots("2026-11-09", "2026-11-09", 60)["slots"]
+            s["start"].startswith("2026-11-09") for s in cal.find_free_slots("2026-11-09", "2026-11-09", 60)["slots"]
         )
         blocked = cal.find_free_slots("2026-11-09", "2026-11-09", 60, all_day_blocks=True)
         assert blocked["slots"] == []

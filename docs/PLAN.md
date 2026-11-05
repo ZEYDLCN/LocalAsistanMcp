@@ -9,7 +9,7 @@
 ### Kapsam içi
 | Alan | İçerik |
 |---|---|
-| **MCP sunucusu** (`localasistan.server`) | stdio taşıması; 26 araç (dosya 11, veritabanı 5, takvim 10); 5 kaynak/şablon; 3 prompt; araç `annotations` (readOnly / destructive / idempotent) |
+| **MCP sunucusu** (`localasistan.server`) | stdio taşıması; 25 araç (dosya 11, veritabanı 5, takvim 9); 5 kaynak/şablon; 3 prompt; araç `annotations` (readOnly / destructive / idempotent) |
 | **MCP istemcisi** (`localasistan.client`) | Sunucuyu alt süreç olarak başlatma, el sıkışma, `tools/resources/prompts` keşfi, çağrı, yeniden bağlanma, hata/zaman aşımı yönetimi |
 | **Ajan döngüsü** | Claude (Anthropic SDK) ile akışlı (streaming) araç-kullanım döngüsü; insan onayı (human-in-the-loop); `refusal`, `max_tokens`, iptal, yineleme sınırı |
 | **Web arayüzü** | Sohbet, araç denetçisi (LLM'siz elle çağırma), kaynaklar/promptlar, durum paneli. Bağımlılıksız (build adımı yok) |

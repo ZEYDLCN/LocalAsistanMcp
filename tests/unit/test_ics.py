@@ -213,8 +213,7 @@ class TestParse:
 
     def test_max_events_cap(self):
         body = "".join(
-            self.ev(f"UID:{i}", "SUMMARY:x", "DTSTART:20261106T100000Z", "DTEND:20261106T110000Z")
-            for i in range(10)
+            self.ev(f"UID:{i}", "SUMMARY:x", "DTSTART:20261106T100000Z", "DTEND:20261106T110000Z") for i in range(10)
         )
         r = ics.parse_calendar(self.wrap(body), IST, max_events=3)
         assert len(r.events) == 3 and any("stopped" in w for w in r.warnings)

@@ -124,9 +124,7 @@ class TestSettings:
 
     def test_env_beats_dotenv_and_empty_env_ignored(self, tmp_path: Path):
         dotenv = tmp_path / ".env"
-        dotenv.write_text(
-            "ANTHROPIC_API_KEY=from-file\nLOCALASISTAN_MODEL=file-model\nLOCALASISTAN_PORT=1111\n"
-        )
+        dotenv.write_text("ANTHROPIC_API_KEY=from-file\nLOCALASISTAN_MODEL=file-model\nLOCALASISTAN_PORT=1111\n")
         s = Settings.from_env(
             {"LOCALASISTAN_MODEL": "env-model", "ANTHROPIC_API_KEY": "", "LOCALASISTAN_PORT": "  "},
             dotenv_path=dotenv,

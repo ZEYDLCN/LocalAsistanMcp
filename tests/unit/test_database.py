@@ -75,9 +75,7 @@ class TestSchema:
         assert by_name["adults"]["type"] == "view"
 
     def test_describe(self, people):
-        people.execute(
-            "CREATE TABLE pets (id INTEGER PRIMARY KEY, owner_id INTEGER REFERENCES people(id), name TEXT)"
-        )
+        people.execute("CREATE TABLE pets (id INTEGER PRIMARY KEY, owner_id INTEGER REFERENCES people(id), name TEXT)")
         people.execute("CREATE INDEX idx_pets_owner ON pets(owner_id)")
         info = people.describe_table("people")
         assert info["row_count"] == 3 and info["type"] == "table"
@@ -210,9 +208,7 @@ class TestQuery:
     def test_runaway_query_is_stopped(self, people):
         started = time.monotonic()
         with pytest.raises(LimitError, match="time limit"):
-            people.query(
-                "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c"
-            )
+            people.query("WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c")
         assert time.monotonic() - started < 5
 
     def test_memory_bombs_are_rejected(self, db):
@@ -263,9 +259,7 @@ class TestExecute:
         assert r["rows_affected"] == 1
 
     def test_with_prefixed_dml(self, people):
-        r = people.execute(
-            "WITH ids AS (SELECT id FROM people WHERE age > 35) DELETE FROM people WHERE id IN ids"
-        )
+        r = people.execute("WITH ids AS (SELECT id FROM people WHERE age > 35) DELETE FROM people WHERE id IN ids")
         assert r["rows_affected"] == 1
 
     @pytest.mark.parametrize(
@@ -302,9 +296,7 @@ class TestExecute:
         with pytest.raises(SqlGuardError):
             people.execute("CREATE VIRTUAL TABLE v USING fts5(a)")
         with pytest.raises(SqlGuardError):
-            people.execute(
-                "INSERT INTO sqlite_master (type, name, tbl_name, sql) VALUES ('table','x','x','')"
-            )
+            people.execute("INSERT INTO sqlite_master (type, name, tbl_name, sql) VALUES ('table','x','x','')")
         with pytest.raises(SqlGuardError):
             people.execute("UPDATE sqlite_sequence SET seq = 99")
 
@@ -363,9 +355,7 @@ class TestInsert:
 
     def test_unicode_roundtrip(self, people):
         people.insert("people", [{"name": "Gülşen İğdır", "note": "Çok güzel — ✓"}])
-        assert people.query("SELECT note FROM people WHERE name = ?", ["Gülşen İğdır"])["rows"] == [
-            ["Çok güzel — ✓"]
-        ]
+        assert people.query("SELECT note FROM people WHERE name = ?", ["Gülşen İğdır"])["rows"] == [["Çok güzel — ✓"]]
 
     def test_default_values_row(self, db):
         db.execute("CREATE TABLE d (id INTEGER PRIMARY KEY, v TEXT DEFAULT 'x')")
