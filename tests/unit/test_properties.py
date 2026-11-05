@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import os
+import shutil
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -53,8 +54,8 @@ SEGMENTS = st.sampled_from(
 )
 
 
-@pytest.fixture(scope="module")
-def jail():
+def make_jail() -> tuple[Path, Path]:
+    """Çalışma alanı + dışında bir 'gizli' klasör ve içeriden dışarıya/içeriye işaret eden iki sembolik bağ kurar."""
     base = Path(tempfile.mkdtemp(prefix="la-prop-"))
     root, outside = base / "ws", base / "outside"
     (root / "dir").mkdir(parents=True)
@@ -64,6 +65,14 @@ def jail():
     (root / "link_out").symlink_to(outside)
     (root / "link_in").symlink_to(root / "dir")
     return root, outside
+
+
+@pytest.fixture(scope="module")
+def jail():
+    """Yalnızca okuyan testler için ortak jail (yazan testler her örnekte taze bir jail kurar)."""
+    root, outside = make_jail()
+    yield root, outside
+    shutil.rmtree(root.parent, ignore_errors=True)
 
 
 def snapshot(directory: Path) -> dict[str, bytes]:
@@ -89,55 +98,61 @@ OPS = st.sampled_from(["write", "overwrite", "append", "mkdir", "move", "delete"
 
 @FAST
 @given(steps=st.lists(st.tuples(OPS, st.lists(SEGMENTS, max_size=4), st.lists(SEGMENTS, max_size=4)), max_size=12))
-def test_no_file_operation_can_touch_anything_outside_the_workspace(jail, steps):
-    root, outside = jail
-    service = FileService(Sandbox(root), max_file_bytes=10_000)
-    before = snapshot(outside)
-    for op, p1, p2 in steps:
-        a, b = "/".join(p1), "/".join(p2)
-        try:
-            match op:
-                case "write":
-                    service.write_new(a, "x")
-                case "overwrite":
-                    service.overwrite(a, "y")
-                case "append":
-                    service.append(a, "z")
-                case "mkdir":
-                    service.make_dir(a)
-                case "move":
-                    service.move(a, b)
-                case "delete":
-                    service.delete(a)
-                case "delete_r":
-                    service.delete(a, recursive=True)
-                case "read":
-                    service.read_text(a)
-                case "grep":
-                    service.grep("SECRET", a)
-        except LocalAsistanError:
-            pass
-    assert snapshot(outside) == before and outside.exists()
-    assert (root / "link_out").is_symlink() or not (
-        root / "link_out"
-    ).exists()  # outside'a işaret eden link bozulmamış/silinmiş olabilir
-    # temizle: bir sonraki örnek için başlangıç durumunu geri kur
-    for child in list(root.iterdir()):
-        if child.name in ("dir", "file.txt", "link_out", "link_in"):
-            continue
-        if child.is_dir() and not child.is_symlink():
-            import shutil
+def test_no_file_operation_can_touch_anything_outside_the_workspace(steps):
+    # Her örnek taze bir jail ile başlar: önceki bir örneğin bıraktığı kalıntı (ör. sembolik bağın silinip yerine
+    # gerçek klasör açılması) sonraki örneği etkileyemez, hata ayıklarken küçültme (shrink) de doğru çalışır.
+    root, outside = make_jail()
+    try:
+        service = FileService(Sandbox(root), max_file_bytes=10_000)
+        before = snapshot(outside)
+        for op, p1, p2 in steps:
+            a, b = "/".join(p1), "/".join(p2)
+            try:
+                match op:
+                    case "write":
+                        service.write_new(a, "x")
+                    case "overwrite":
+                        service.overwrite(a, "y")
+                    case "append":
+                        service.append(a, "z")
+                    case "mkdir":
+                        service.make_dir(a)
+                    case "move":
+                        service.move(a, b)
+                    case "delete":
+                        service.delete(a)
+                    case "delete_r":
+                        service.delete(a, recursive=True)
+                    case "read":
+                        service.read_text(a)
+                    case "grep":
+                        service.grep("SECRET", a)
+            except LocalAsistanError:
+                pass
+        # Değişmez: dışarıdaki hiçbir dosya değişmez, silinmez, eklenmez.
+        assert outside.exists()
+        assert snapshot(outside) == before
+        # Çalışma alanındaki bağ hâlâ bir bağ ise dışarıyı göstermeye devam eder (içeriği bozulmaz).
+        link = root / "link_out"
+        if link.is_symlink():
+            assert link.resolve() == outside.resolve()
+    finally:
+        shutil.rmtree(root.parent, ignore_errors=True)
 
-            shutil.rmtree(child)
-        else:
-            child.unlink()
-    (root / "dir").mkdir(exist_ok=True)
-    if not (root / "file.txt").exists():
-        (root / "file.txt").write_text("inside")
-    for name, target in (("link_out", outside), ("link_in", root / "dir")):
-        link = root / name
-        if not os.path.lexists(link):
-            link.symlink_to(target)
+
+@pytest.mark.parametrize("recursive", [False, True])
+def test_deleting_a_symlink_to_outside_removes_only_the_link_and_the_name_can_be_reused(recursive):
+    """Regresyon: `link_out` bağını silip aynı adla klasör açmak meşrudur; dışarıdaki veri etkilenmez."""
+    root, outside = make_jail()
+    try:
+        service = FileService(Sandbox(root), max_file_bytes=10_000)
+        before = snapshot(outside)
+        service.delete("link_out", recursive=recursive)
+        service.make_dir("link_out")
+        assert snapshot(outside) == before
+        assert (root / "link_out").is_dir() and not (root / "link_out").is_symlink()
+    finally:
+        shutil.rmtree(root.parent, ignore_errors=True)
 
 
 # ====================================================================== SQL güvenliği
